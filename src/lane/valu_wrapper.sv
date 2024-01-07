@@ -54,7 +54,7 @@ module valu_wrapper
   for (genvar i = 0; i < 2; ++i) begin : gen_op_buf
     // Generally, our coding style has each module output its signal early(
     // i.e., pipeline registers delay one cycle of output). But here We expect
-    // that `alu_op` will not arrive early in this cycle for sram reading and 
+    // that `alu_op` will not arrive early in this cycle for sram reading and
     // shuffle delay.
     fifo_v3 #(
       .DEPTH     (ALUOpBufDepth),
