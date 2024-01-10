@@ -25,7 +25,7 @@ package core_pkg;
 
   localparam int unsigned VLENB = VLEN / 8;
   localparam int unsigned MAXVL = VLEN;
-  localparam int unsigned VLWidth = $clog2(MAXVL + 1);
+  localparam int unsigned VLWidth  /*verilator public*/ = $clog2(MAXVL + 1);
   localparam int unsigned LaneVLWidth = VLWidth - LogNrLane;
 
   // Bank number of vector register file slice in
@@ -39,7 +39,7 @@ package core_pkg;
   localparam int unsigned VRFSliceNumWords = RegSliceNumWords * rvv_pkg::NrVReg;
   localparam int unsigned VRFSlicePerBankNumWords = VRFSliceNumWords / NrBank;
 
-  localparam int unsigned InsnIDWidth = 3;
+  localparam int unsigned InsnIDWidth  /*verilator public*/ = 3;
   localparam int unsigned InsnIDNum = 1 << InsnIDWidth;
 
   typedef logic [InsnIDWidth-1:0] insn_id_t;
@@ -97,7 +97,7 @@ package core_pkg;
     vlen_t           vle;
     vlen_t           vstart;
     rvv_pkg::vtype_t vtype;
-  } vec_context_t;
+  } vec_context_t  /*verilator public*/;
 
   typedef struct packed {
     vreg_t         vs1;

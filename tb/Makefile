@@ -30,7 +30,7 @@ test_top:
 
 rvv_core:
 	verilator -Wall -Wno-fatal --cc --Mdir $(BUILD_DIR) \
-	--top rvv_core -CFLAGS -fpic $(Verilator_inc_args) \
+	--top rvv_core -CFLAGS "-fpic -std=c++17" $(Verilator_inc_args) \
 	$(if $(trace),--trace --trace-structs --trace-fst) \
 	$(if $(DUMP_VRF_ACCESS), -DDUMP_VRF_ACCESS) \
 	$(DEPS_SRC) $(SRC)

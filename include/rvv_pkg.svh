@@ -4,17 +4,19 @@
 package rvv_pkg;
 
   localparam int unsigned NrVReg = 32;
+  localparam int unsigned VSEWWidth  /*verilator public*/ = 2;
+  localparam int unsigned VLMULWidth  /*verilator public*/ = 3;
 
   // Element width for vfu operation
-  typedef enum logic [1:0] {
+  typedef enum logic [VSEWWidth-1:0] {
     EW8  = 2'b00,
     EW16 = 2'b01,
     EW32 = 2'b10,
     EW64 = 2'b11
-  } vew_e;
+  } vew_e  /*verilator public*/;
 
   // Length multiplier
-  typedef enum logic [2:0] {
+  typedef enum logic [VLMULWidth-1:0] {
     LMUL_1    = 3'b000,
     LMUL_2    = 3'b001,
     LMUL_4    = 3'b010,
@@ -23,7 +25,7 @@ package rvv_pkg;
     LMUL_1_8  = 3'b101,
     LMUL_1_4  = 3'b110,
     LMUL_1_2  = 3'b111
-  } vlmul_e;
+  } vlmul_e  /*verilator public*/;
 
   // Func3 values for vector arithmetics instructions under OpcodeV
   typedef enum logic [2:0] {
