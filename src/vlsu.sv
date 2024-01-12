@@ -101,15 +101,15 @@ module vlsu
         if (store_op_gnt_i) begin
           op_cnt_d               = op_cnt_q + 1;
           store_op_gnt[op_cnt_q] = 1'b1;
-          if (op_cnt_d >= NrLane[GetWidth(NrLane)-1:0]) begin
+          if (op_cnt_q == NrLaneMinusOne[GetWidth(NrLane)-1:0]) begin
             op_cnt_d = 'b0;
           end
           vfu_req_d.vlB = vfu_req_q.vlB - VRFWordWidthB[$bits(vlen_t)-1:0];
           if (vfu_req_q.vlB <= VRFWordWidthB[$bits(vlen_t)-1:0]) begin
             // vfu_req_d.vlB = 'b0;
             // reset operand selection signal
-            op_cnt_d      = 'b0;
-            done_o        = 1'b1;
+            op_cnt_d = 'b0;
+            done_o   = 1'b1;
 
             if (!done_gnt_i) begin
               state_d = WAIT;

@@ -18,8 +18,9 @@ package core_pkg;
 `ifdef NrLane
   localparam int unsigned NrLane = `NrLane;
 `else
-  localparam int unsigned NrLane = 1;
+  localparam int unsigned NrLane = 2;
 `endif
+  localparam int unsigned NrLaneMinusOne = NrLane - 1;
   // TODO: assert NrLane and NrBank are power of 2
   localparam int unsigned LogNrLane = $clog2(NrLane);
 

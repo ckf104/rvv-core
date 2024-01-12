@@ -119,7 +119,7 @@ module rvv_core
   logic [NrLane-1:0] store_op_valid;
   vrf_data_t [NrLane-1:0] store_op;
 
-  lane lane (
+  lanes lanes (
     .clk_i           (clk_i),
     .rst_ni          (rst_ni),
     .insn_commit_i   (insn_can_commit),
