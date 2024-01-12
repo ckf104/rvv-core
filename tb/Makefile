@@ -23,17 +23,18 @@ Verilator_inc_args = $(addprefix -I,$(INC_DIR))
 test_top:
 	verilator -Wall -Wno-fatal --cc --exe --Mdir $(BUILD_DIR) \
 	--top verilator_test_top $(Verilator_inc_args) \
-	$(if $(trace),--trace --trace-structs --trace-fst) \
+	$(if $(trace),--trace-structs --trace-fst) \
 	$(if $(DUMP_VRF_ACCESS), -DDUMP_VRF_ACCESS) \
 	$(DEPS_SRC) $(SRC) $(TB_SRC) $(CPP_SRC) 2>&1 | tee log.txt
 	make -C $(BUILD_DIR) -f Vverilator_test_top.mk -j8
 
 rvv_core:
 	verilator -Wall -Wno-fatal --cc --Mdir $(BUILD_DIR) \
-	--top rvv_core -CFLAGS "-fpic -std=c++17" $(Verilator_inc_args) \
-	$(if $(trace),--trace --trace-structs --trace-fst) \
+	--top rvv_core -CFLAGS "-fpic" $(Verilator_inc_args) \
+	$(if $(trace),--trace-structs --trace-fst) \
 	$(if $(DUMP_VRF_ACCESS), -DDUMP_VRF_ACCESS) \
-	$(DEPS_SRC) $(SRC)
+	$(if $(debug), -CFLAGS "-g") \
+	$(DEPS_SRC) $(SRC) 2>&1 | tee log.txt
 
 clean:
 	rm -rf $(BUILD_DIR)

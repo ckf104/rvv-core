@@ -1,2 +1,4 @@
 .vscode/
 tb/obj_dir
+tb/log.txt
+tb/compile_commands.json

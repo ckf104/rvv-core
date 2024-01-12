@@ -81,6 +81,7 @@ module valu_wrapper
     alu_done_id_o    = vfu_req_q.insn_id;
     alu_result_valid = 1'b0;
     commit_cnt_d     = commit_cnt_q;
+    state_d          = state_q;
 
     unique case (state_q)
       IDLE: begin
