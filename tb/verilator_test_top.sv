@@ -43,11 +43,7 @@ module stimulus_emitter
   end
 
   always_comb begin
-    cnt_d = cnt_q;
-    if (valid_o && ready_i) begin
-      cnt_d = cnt_q + 1;
-    end
-
+    cnt_d                = cnt_q;
     valid_o              = cnt_q < NumStimulus;
     sel                  = valid_o ? cnt_q : 'b0;
     insn_o               = stim_array[sel].insn;
@@ -56,6 +52,9 @@ module stimulus_emitter
     insn_can_commit_o    = 1'b1;
     insn_can_commit_id_o = stim_array[sel].insn_id;
     flush_o              = 1'b0;
+    if (valid_o && ready_i) begin
+      cnt_d = cnt_q + 1;
+    end
   end
 
   initial begin

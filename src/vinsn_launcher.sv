@@ -35,7 +35,9 @@ module vinsn_launcher
   input  insn_id_t                   insn_can_commit_id_i,
   output logic       [InsnIDNum-1:0] insn_can_commit_o
 );
-
+  // `vinsn_launcher` will send `vfu_req` to `valu_wrapper` and
+  // `op_req` to `vrf_accesser`, use a mask to ensure that both
+  // req are sent once and only once.
   logic vfu_req_mask_q, vfu_req_mask_d;
   vfu_req_t vfu_req_q, vfu_req_d;
   vfu_e target_vfu_q, target_vfu_d, target_vfu;
@@ -83,7 +85,7 @@ module vinsn_launcher
       last_flip_bit_d = issue_req_i.flip_bit;
     end
     issue_req_ready_o = 1'b0;
-    if ((!vfu_req_mask_d || vfu_req_ready_i[target_vfu]) && (!op_req_mask_d || op_req_ready_i)) begin
+    if ((!vfu_req_mask_d || vfu_req_ready_i[target_vfu_o]) && (!op_req_mask_d || op_req_ready_i)) begin
       issue_req_ready_o = 1'b1;
     end
   end
