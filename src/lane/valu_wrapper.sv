@@ -4,6 +4,7 @@ module valu_wrapper
   import core_pkg::*;
   import rvv_pkg::*;
 #(
+  parameter int unsigned LaneId = 0,
   parameter int unsigned ALUOpBufDepth = 4,
   parameter int unsigned ALUWBufDepth  = 2
 ) (

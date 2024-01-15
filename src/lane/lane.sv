@@ -3,7 +3,7 @@
 module lane
   import core_pkg::*;
 #(
-
+  parameter int unsigned LaneId = 0
 ) (
   input  logic                      clk_i,
   input  logic                      rst_ni,
@@ -75,7 +75,9 @@ module lane
     end
   end*/
 
-  valu_wrapper alu_wrapper (
+  valu_wrapper #(
+    .LaneId(LaneId)
+  ) alu_wrapper (
     .clk_i             (clk_i),
     .rst_ni            (rst_ni),
     // interface with `vinsn_launcher`

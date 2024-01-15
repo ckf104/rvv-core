@@ -47,7 +47,9 @@ module lanes
   end
 
   for (genvar lane_id = 0; lane_id < NrLane; lane_id++) begin : gen_lane
-    lane lane (
+    lane #(
+      .LaneId(lane_id)
+    ) lane (
       .clk_i           (clk_i),
       .rst_ni          (rst_ni),
       .insn_commit_i   (insn_commit_i),

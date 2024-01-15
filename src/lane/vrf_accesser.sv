@@ -5,7 +5,7 @@ module vrf_accesser
   import core_pkg::*;
   import rvv_pkg::*;
 #(
-  //parameter int unsigned LaneId = 0
+  parameter int unsigned LaneId = 0
 ) (
   input  logic                      clk_i,
   input  logic                      rst_ni,
@@ -224,14 +224,14 @@ module vrf_accesser
     for (int i = VALU; i < NrLaneVFU; i = i + 1) begin
       automatic vfu_e q = vfu_e'(i);
       if (vfu_result_gnt_o[i]) begin
-        $display("[%0d] %s, W: addr:%0x, data:%0x, id:%0x", $time, q.name(), vfu_result_addr_i[i],
+        $display("[%0d][Lane%0d][VRFWrite] %s: addr:%0x, data:%0x, id:%0x", $time, LaneId, q.name(), vfu_result_addr_i[i],
                  vfu_result_wdata_i[i], vfu_result_id_i[i]);
       end
     end
     for (int i = ALUA; i < NrOpQueue; i = i + 1) begin
       automatic op_queue_e q = vfu_e'(i);
       if (rdata_valid_q[i]) begin
-        $display("[%0d] %s, R: addr:%0x, data:%0x", $time, q.name(), (vrf_req_addr[i] << $clog2(NrBank)
+        $display("[%0d][Lane%0d][VRFRead] %s: addr:%0x, data:%0x", $time, LaneId, q.name(), (vrf_req_addr[i] << $clog2(NrBank)
                  ) + bank_sel[i] - 1, rdata[bank_sel_q[i]]);
       end
     end
