@@ -58,9 +58,6 @@ module stimulus_emitter
   end
 
   initial begin
-    vle   = 'd8;
-    vtype = vtype_t'{vsew   : EW64,  //
- vlmul  : LMUL_1, default: 'b0};
     `CASE2
   end
 

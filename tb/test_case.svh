@@ -8,6 +8,9 @@ localparam int unsigned NumStimulus = 2;
 // vmv.v.i v2, 1
 // vse64.v v2,(ra)
 `define CASE1 \
+    vle   = 'd8; \
+    vtype = vtype_t'{vsew   : EW64, \
+    vlmul  : LMUL_1, default: 'b0}; \
     stim_array[0] = stimulus'{                                             \
       insn       : 32'h5e00b157,                                           \
       insn_id    : 'd0,                                                    \
@@ -28,6 +31,9 @@ localparam int unsigned NumStimulus = 4;
 // vadd.vv v1, v2, v3
 // vse64.v v1,(ra)
 `define CASE2 \
+    vle   = 'd8; \
+    vtype = vtype_t'{vsew   : EW64, \
+    vlmul  : LMUL_1, default: 'b0}; \
     stim_array[0] = stimulus'{                                             \
       insn       : 32'h5e00b157,                                           \
       insn_id    : 'd0,                                                    \
