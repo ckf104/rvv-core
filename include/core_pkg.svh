@@ -5,6 +5,7 @@
 `include "riscv_pkg.svh"
 
 package core_pkg;
+// verilator lint_off UNUSEDPARAM
 
   localparam int unsigned ELEN = 64;
   localparam int unsigned ELENB = ELEN / 8;
@@ -166,6 +167,7 @@ package core_pkg;
     return (num_idx > 32'd1) ? unsigned'($clog2(num_idx)) : 32'd1;
   endfunction
 
+// verilator lint_on UNUSEDPARAM
 endpackage : core_pkg
 
 `endif  // _CORE_PKG_SVH

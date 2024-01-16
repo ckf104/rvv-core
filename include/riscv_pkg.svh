@@ -2,6 +2,7 @@
 `define _RISCV_PKG_SVH
 
 package riscv_pkg;
+// verilator lint_off UNUSEDPARAM
 
   localparam XLEN = 64;
   typedef logic [XLEN-1:0] xlen_t;
@@ -22,6 +23,7 @@ package riscv_pkg;
   localparam exp_type_t LOAD_PAGE_FAULT = 13;  // Load page fault
   localparam exp_type_t STORE_PAGE_FAULT = 15;  // Store page fault
 
+// verilator lint_on UNUSEDPARAM
 endpackage : riscv_pkg
 
 `endif  // _RISCV_PKG_SVH
