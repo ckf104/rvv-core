@@ -21,8 +21,8 @@
 ## Design
 
 * 目前的握手信号处理感觉有些混乱，valid, ready 信号之间的依赖关系从命名上看得不够清楚
-    * decoder <-> scalar core,
-    * launcher <-> decoder,
+    * decoder <-> scalar core, decoder 会在下一级流水线能动（即 launcher 拉高了自己的 ready 或者 下一级寄存器不存在有效信号）时将 ready 信号拉高，因此 decoder 的 ready 信号与 scalar core 无关
+    * launcher <-> decoder, decoder 的 req_valid 信号从流水线寄存器中发出，因此显然是与 launcher 的 ready 信号无关，而 launcher 的 ready 信号的生成逻辑与 decoder 一致，仅依赖于下一级（vrf_accesser 和 vfu）的 ready 信号
     * vrf_accesser <-> launcher, vrf_accesser 中每个 opqueue 的 ready 信号独立拉高，当 op_req_i 中请求的 opqueue 都 ready 时，vrf_accesser 的 ready 信号会拉高，因此总的说来，vrf_accesser 的 ready 信号不依赖于 launcher 的 valid 信号。但由于 lanes.sv 中整合了每个 lane 的信号，导致每个 vrf_accesser 收到的 valid 的信号是依赖于自身发出的 ready 信号的（当所有 lane 的 vrf_accesser 的 ready 拉高时，vrf_accesser 才可能收到拉高的 valid 信号）
     * vfu <-> launcher, vfu 当自己的 state 为 IDLE 时，拉高 ready 信号，因此 ready 信号与 launcher 的 valid 信号无关，由于与 vrf_accesser 同样的原因，vfu 收到的 valid 信号依赖于自己发出的 ready 信号
 

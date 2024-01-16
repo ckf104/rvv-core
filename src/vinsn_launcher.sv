@@ -68,27 +68,31 @@ module vinsn_launcher
     end
   end
 
+  always_comb begin : gen_req_ready
+    issue_req_ready_o = 1'b0;
+    if ((!vfu_req_valid_o || vfu_req_ready_i[target_vfu_o]) && (!op_req_valid_o || op_req_ready_i)) begin
+      issue_req_ready_o = 1'b1;
+    end
+  end
 
-  always_comb begin
+  always_comb begin : req_mask
     vfu_req_mask_d  = vfu_req_mask_q;
     op_req_mask_d   = op_req_mask_q;
     last_flip_bit_d = last_flip_bit_q;
 
-    target_vfu      = GetVFUByVOp(issue_req_i.vop);
-
-
     if (vfu_req_valid_o && vfu_req_ready_i[target_vfu_o]) vfu_req_mask_d = 1'b0;
     if (op_req_valid_o && op_req_ready_i) op_req_mask_d = 1'b0;
+
+    // `issue_req_i.flip_bit != last_flip_bit_q` indicates a new instruction's
+    // coming, and granting of last instruction implicitly. So we can refresh
+    // mask safely.
     if (issue_req_valid_i && issue_req_i.flip_bit != last_flip_bit_q) begin
       vfu_req_mask_d  = 1'b1;
       op_req_mask_d   = 1'b1;
       last_flip_bit_d = issue_req_i.flip_bit;
     end
-    issue_req_ready_o = 1'b0;
-    if ((!vfu_req_mask_d || vfu_req_ready_i[target_vfu_o]) && (!op_req_mask_d || op_req_ready_i)) begin
-      issue_req_ready_o = 1'b1;
-    end
-  end
+
+  end : req_mask
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
@@ -104,11 +108,13 @@ module vinsn_launcher
     end
   end
 
-  always_comb begin
+  always_comb begin : gen_vfu_req
     // Deassert valid signal once handshake is successful.
     vfu_req_valid_d = vfu_req_valid_q;
     vfu_req_d       = vfu_req_q;
+    target_vfu      = GetVFUByVOp(issue_req_i.vop);
     target_vfu_d    = target_vfu_q;
+
     if (vfu_req_ready_i[target_vfu] || !vfu_req_valid_q) begin
       vfu_req_valid_d     = issue_req_valid_i & vfu_req_mask_d;
 
@@ -121,9 +127,12 @@ module vinsn_launcher
       vfu_req_d.insn_id   = issue_req_i.insn_id;
       target_vfu_d        = target_vfu;
     end
+  end : gen_vfu_req
 
+  always_comb begin : gen_op_req
     op_req_valid_d = op_req_valid_q;
     op_req_d       = op_req_q;
+
     if (op_req_ready_i || !op_req_valid_q) begin
       op_req_valid_d     = issue_req_valid_i & op_req_mask_d;
 
@@ -132,8 +141,7 @@ module vinsn_launcher
       op_req_d.queue_req = GetOpQueue(issue_req_i.vop, issue_req_i.use_vs);
       op_req_d.vlB       = issue_req_i.vlB;
     end
-
-  end
+  end : gen_op_req
 
   // TODO: fix valid/ready bugs
 
