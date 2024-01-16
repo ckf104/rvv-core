@@ -1,6 +1,6 @@
 `include "core_pkg.svh"
 
-module vlsu
+module vsu
   import core_pkg::*;
 #(
   parameter int unsigned InOpBufDepth = 4
@@ -29,12 +29,15 @@ module vlsu
 );
   logic [NrLane-1:0] op_in_buf_empty, op_in_buf_full;
   logic [NrLane-1:0] store_op_valid, store_op_gnt;
-  vrf_data_t [NrLane-1:0] store_op;
+  vrf_data_t [NrLane-1:0] store_op, shuffled_store_op;
+  vrf_strb_t [NrLane-1:0] mask, mask_d, mask_q;
+
   assign store_op_ready_o = ~op_in_buf_full;
   assign store_op_valid   = ~op_in_buf_empty;
 
-  // We can't assume all store operands will arrive in vlsu at the same time,
+  // We can't assume all store operands will arrive in vsu at the same time,
   // hence four fifo have been generated.
+  // Note: vrf_accesser don't launch an access until store_op_ready_o is asserted.
   for (genvar i = 0; i < NrLane; ++i) begin : gen_op_in_buf
     fifo_v3 #(
       .DEPTH     (InOpBufDepth),
@@ -43,6 +46,7 @@ module vlsu
       .clk_i     (clk_i),
       .rst_ni    (rst_ni),
       .testmode_i(1'b0),
+      // TODO: we need to flush the fifo when exception occurs
       .flush_i   (1'b0),
       .data_i    (store_op_i[i]),
       .push_i    (store_op_valid_i[i]),
@@ -57,6 +61,18 @@ module vlsu
   logic [GetWidth(NrLane)-1:0] op_cnt_q, op_cnt_d;
   vfu_req_t vfu_req_q, vfu_req_d;
 
+  mem_deshuffler_v1 mem_deshuffler (
+    // Input data
+    .data_i   (store_op),
+    .bytes_cnt(vfu_req_q.vlB),
+    // Select one vrf word
+
+    .sew   (vfu_req_q.vew),
+    // Output data
+    .data_o(shuffled_store_op),
+    .mask_o(mask)
+  );
+
   typedef enum logic [1:0] {
     IDLE,
     STORE,
@@ -69,10 +85,12 @@ module vlsu
       // don't need to reset `vfu_req_q`
       op_cnt_q <= 'b0;
       state_q  <= IDLE;
+      mask_q   <= 'b0;
     end else begin
       vfu_req_q <= vfu_req_d;
       op_cnt_q  <= op_cnt_d;
       state_q   <= state_d;
+      mask_q    <= mask_d;
     end
   end
 
@@ -83,73 +101,62 @@ module vlsu
 
     vfu_req_ready_o  = 1'b0;
     store_op_valid_o = 1'b0;
-    store_op_o       = store_op[op_cnt_q];
     done_o           = 1'b0;
     done_insn_id_o   = vfu_req_q.insn_id;
     store_op_gnt     = 'b0;
 
+    mask_d           = mask_q;
+    if (op_cnt_q == 'b0) mask_d = mask;
+
     unique case (state_q)
       IDLE: begin
         vfu_req_ready_o = 1'b1;
-        if (vfu_req_valid_i && target_vfu_i == VLSU) begin
+        if (vfu_req_valid_i && target_vfu_i == VSU) begin
           vfu_req_d = vfu_req_i;
           state_d   = STORE;
         end
       end
       STORE: begin
-        store_op_valid_o = store_op_valid[op_cnt_q];
+        // TODO: we don't need to wait all lanes' operand
+        store_op_valid_o = &store_op_valid;
+        store_op_o       = shuffled_store_op[op_cnt_q];
         if (store_op_gnt_i) begin
-          op_cnt_d               = op_cnt_q + 1;
-          store_op_gnt[op_cnt_q] = 1'b1;
+          op_cnt_d = op_cnt_q + 1;
           if (op_cnt_q == NrLaneMinusOne[GetWidth(NrLane)-1:0]) begin
-            op_cnt_d = 'b0;
+            store_op_gnt = {NrLane{1'b1}};
+            op_cnt_d     = 'b0;
           end
           vfu_req_d.vlB = vfu_req_q.vlB - VRFWordWidthB[$bits(vlen_t)-1:0];
           if (vfu_req_q.vlB <= VRFWordWidthB[$bits(vlen_t)-1:0]) begin
             // vfu_req_d.vlB = 'b0;
             // reset operand selection signal
             op_cnt_d = 'b0;
-            done_o   = 1'b1;
+            for (int unsigned i = 0; i < NrLane; ++i) store_op_gnt[i] = |mask_d[i];
+            done_o          = 1'b1;
+            // mask_d = 'b0;
 
-            if (!done_gnt_i) begin
-              state_d = WAIT;
-            end else if (vfu_req_valid_i && target_vfu_i == VLSU) begin
-              vfu_req_d = vfu_req_i;
-            end else begin
-              state_d = IDLE;
-            end
+            // Received `vfu_req_valid_i` depends on `vfu_req_ready_o`, therefore we
+            // can't set `vfu_req_ready_o` according to `vfu_req_valid_i`.
+            vfu_req_ready_o = done_gnt_i;
+            if (!done_gnt_i) state_d = WAIT;
+            else if (vfu_req_valid_i && target_vfu_i == VSU) vfu_req_d = vfu_req_i;
+            else state_d = IDLE;
           end
         end
       end
       WAIT: begin
-        done_o = 1'b1;
+        done_o          = 1'b1;
+        // Received `vfu_req_valid_i` depends on `vfu_req_ready_o`, therefore we
+        // can't set `vfu_req_ready_o` according to `vfu_req_valid_i`.
+        vfu_req_ready_o = done_gnt_i;
         if (done_gnt_i) begin
-          if (vfu_req_valid_i && target_vfu_i == VLSU) begin
+          if (vfu_req_valid_i && target_vfu_i == VSU) begin
             vfu_req_d = vfu_req_i;
             state_d   = STORE;
-          end else begin
-            state_d = IDLE;
-          end
+          end else state_d = IDLE;
         end
       end
     endcase
   end
 
-  /*fifo_v3 #(
-    .DEPTH     (OutOpBufDepth),
-    .DATA_WIDTH($bits(vrf_data_t))
-  ) alu_op_buffer (
-    .clk_i     (clk_i),
-    .rst_ni    (rst_ni),
-    .testmode_i(1'b0),
-    .flush_i   (1'b0),
-    .data_i    (store_op),
-    .push_i    (store_op_valid),
-    .full_o    (store_op_ready),
-    .data_o    (store_op_o),
-    .pop_i     (store_op_gnt_i),
-    .empty_o   (store_result_buf_empty),
-    .usage_o   ()
-  );*/
-
-endmodule : vlsu
+endmodule : vsu

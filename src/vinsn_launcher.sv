@@ -13,7 +13,7 @@ module vinsn_launcher
   // Interface with `valu_wrapper`
   input  logic       [    NrVFU-1:0] vfu_req_ready_i,
   output logic                       vfu_req_valid_o,
-  output logic                       target_vfu_o,
+  output vfu_e                       target_vfu_o,
   output vfu_req_t                   vfu_req_o,
   // Interface with `vrf_accesser`
   input  logic                       op_req_ready_i,

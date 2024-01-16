@@ -30,9 +30,9 @@ module vinsn_decoder
   logic illegal_insn;
   issue_req_t issue_req_d, issue_req_q;
   varith_type_t varith_insn;
-  vmem_type_t vmem_insn;
+  vmem_type_t   vmem_insn;
 
-  vew_e store_vew;
+  vew_e store_vew, load_vew;
   always_comb begin : decode_store_vew
 
   end
@@ -60,6 +60,7 @@ module vinsn_decoder
     flip_bit_d   = flip_bit_q;
     issue_req_d  = issue_req_q;
     store_vew    = EW8;
+    load_vew     = EW8;
     illegal_insn = 1'b0;
     if (req_ready_i || !req_valid_q) begin
       issue_req_d.vew     = vec_context_i.vtype.vsew;
@@ -123,6 +124,22 @@ module vinsn_decoder
           issue_req_d.vop    = VSE;
           issue_req_d.vlB    = vec_context_i.vle << store_vew;
           issue_req_d.vew    = store_vew;
+        end
+        OpcodeLoadFP: begin
+          // verilog_format: off
+          unique case ({vmem_insn.mew, vmem_insn.width})
+            4'b0000: load_vew = EW8;
+            4'b0101: load_vew = EW16;
+            4'b0110: load_vew = EW32;
+            4'b0111: load_vew = EW64;
+            default: illegal_insn = 1'b1;
+          endcase
+          // verilog_format: on
+          issue_req_d.vd     = vmem_insn.vs3;  // vs3 is encoded in the same position as rd
+          issue_req_d.use_vs = 2'b00;
+          issue_req_d.vop    = VLE;
+          issue_req_d.vlB    = vec_context_i.vle << load_vew;
+          issue_req_d.vew    = load_vew;
         end
         default: illegal_insn = 1'b1;
       endcase

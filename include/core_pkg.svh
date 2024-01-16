@@ -41,6 +41,9 @@ package core_pkg;
   localparam int unsigned VRFSliceNumWords = RegSliceNumWords * rvv_pkg::NrVReg;
   localparam int unsigned VRFSlicePerBankNumWords = VRFSliceNumWords / NrBank;
 
+  localparam int unsigned ByteBlock = VRFWordWidthB * NrLane;
+  localparam int unsigned ByteBlockWidth = $clog2(ByteBlock);
+
   localparam int unsigned InsnIDWidth  /*verilator public*/ = 3;
   localparam int unsigned InsnIDNum = 1 << InsnIDWidth;
 
@@ -71,7 +74,8 @@ package core_pkg;
     VSRL,
     VSRA,
     VMERGE,
-    VSE
+    VSE,
+    VLE
   } vop_e;
 
   typedef enum logic {
@@ -88,12 +92,29 @@ package core_pkg;
   } op_queue_e;
   // verilog_format: on
 
-  localparam int unsigned NrVFU = 2;
+  // NrVFU indicates the number of vector functional units and
+  // determines width of vfu_ready, done singals.
+  localparam int unsigned NrVFU = 3;
+
+  // NrLaneVFU indicates the number of vector functional units within
+  // each lane and determines width of vfu_ready, done singals from lane.
   localparam int unsigned NrLaneVFU = 1;
-  typedef enum logic {
+
+  // NrWriteBackVFU indicates the number of VFU will write back result to vrf
+  localparam int unsigned NrWriteBackVFU = 2;
+
+  // Index used by NrVFU, NRLaneVFU
+  typedef enum logic [1:0] {
     VALU,
-    VLSU
+    VLU,
+    VSU
   } vfu_e;
+
+  // Index used by NrWriteBackVFU
+  typedef enum logic {
+    WB_VALU,
+    WB_VLU
+  } wb_vfu_e;
 
   typedef struct packed {
     vlen_t           vle;
@@ -152,7 +173,8 @@ package core_pkg;
   function automatic vfu_e GetVFUByVOp(vop_e vop);
     unique case (vop)
       VADD, VSUB, VSLL, VSRL, VSRA, VMERGE: return VALU;
-      VSE: return VLSU;
+      VSE: return VSU;
+      VLE: return VLU;
       //default: return VALU;
     endcase
   endfunction
@@ -160,6 +182,7 @@ package core_pkg;
     unique case (vop)
       VADD, VSUB, VSLL, VSRL, VSRA, VMERGE: return {{NrOpQueue - 2{1'b0}}, 2'b11 & use_vs};
       VSE: return {{NrOpQueue - 1{1'b0}}, 1'b1} << 2;
+      VLE: return {NrOpQueue{1'b0}};
     endcase
   endfunction
 

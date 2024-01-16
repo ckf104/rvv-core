@@ -7,24 +7,24 @@ module vrf_accesser
 #(
   parameter int unsigned LaneId = 0
 ) (
-  input  logic                      clk_i,
-  input  logic                      rst_ni,
+  input  logic                             clk_i,
+  input  logic                             rst_ni,
   // interface with `vinsn_launcher`
-  input  logic                      req_valid_i,
-  output logic                      req_ready_o,
-  input  op_req_t                   op_req_i,
-  input  logic      [InsnIDNum-1:0] insn_commit_i,
+  input  logic                             req_valid_i,
+  output logic                             req_ready_o,
+  input  op_req_t                          op_req_i,
+  input  logic      [       InsnIDNum-1:0] insn_commit_i,
   // interface with `vfus`
-  input  vrf_data_t [NrLaneVFU-1:0] vfu_result_wdata_i,
-  input  vrf_strb_t [NrLaneVFU-1:0] vfu_result_wstrb_i,
-  input  vrf_addr_t [NrLaneVFU-1:0] vfu_result_addr_i,
-  input  insn_id_t  [NrLaneVFU-1:0] vfu_result_id_i,
-  input  logic      [NrLaneVFU-1:0] vfu_result_valid_i,
-  output logic      [NrLaneVFU-1:0] vfu_result_gnt_o,
+  input  vrf_data_t [  NrWriteBackVFU-1:0] vfu_result_wdata_i,
+  input  vrf_strb_t [  NrWriteBackVFU-1:0] vfu_result_wstrb_i,
+  input  vrf_addr_t [  NrWriteBackVFU-1:0] vfu_result_addr_i,
+  input  insn_id_t  [  NrWriteBackVFU-1:0] vfu_result_id_i,
+  input  logic      [  NrWriteBackVFU-1:0] vfu_result_valid_i,
+  output logic      [  NrWriteBackVFU-1:0] vfu_result_gnt_o,
   // output operands
-  input  logic      [NrOpQueue-1:0] op_ready_i,
-  output logic      [NrOpQueue-1:0] op_valid_o,
-  output vrf_data_t [NrOpQueue-1:0] operand_o
+  input  logic      [       NrOpQueue-1:0] op_ready_i,
+  output logic      [       NrOpQueue-1:0] op_valid_o,
+  output vrf_data_t [       NrOpQueue-1:0] operand_o
 );
   // part 0: shuffle req into each operand queue
   logic [NrOpQueue-1:0] op_queue_req;
@@ -50,13 +50,13 @@ module vrf_accesser
 
 
   // part 1: generate request for each operand queue
-  logic [NrOpQueue+NrLaneVFU-1:0] vrf_req;
-  logic [NrOpQueue+NrLaneVFU-1:0] vrf_gnt;
-  logic [NrOpQueue+NrLaneVFU-1:0] vrf_wen;
-  bank_addr_t [NrOpQueue+NrLaneVFU-1:0] vrf_req_addr;
-  vrf_data_t [NrOpQueue+NrLaneVFU-1:0] vrf_wdata;
-  vrf_strb_t [NrOpQueue+NrLaneVFU-1:0] vrf_wstrb;
-  bank_id_t [NrOpQueue+NrLaneVFU-1:0] bank_sel;
+  logic [NrOpQueue+NrWriteBackVFU-1:0] vrf_req;
+  logic [NrOpQueue+NrWriteBackVFU-1:0] vrf_gnt;
+  logic [NrOpQueue+NrWriteBackVFU-1:0] vrf_wen;
+  bank_addr_t [NrOpQueue+NrWriteBackVFU-1:0] vrf_req_addr;
+  vrf_data_t [NrOpQueue+NrWriteBackVFU-1:0] vrf_wdata;
+  vrf_strb_t [NrOpQueue+NrWriteBackVFU-1:0] vrf_wstrb;
+  bank_id_t [NrOpQueue+NrWriteBackVFU-1:0] bank_sel;
 
   for (genvar op_type = 0; op_type < NrOpQueue; op_type++) begin : gen_req
     lane_vlen_t remain_vl_q, remain_vl_d;
@@ -99,7 +99,7 @@ module vrf_accesser
   end : gen_req
 
   // part 2: generate request for each vfu
-  for (genvar vfu = 0; vfu < NrLaneVFU; vfu++) begin : gen_vfu_req
+  for (genvar vfu = 0; vfu < NrWriteBackVFU; vfu++) begin : gen_vfu_req
     assign vrf_req[vfu+NrOpQueue]      = vfu_result_valid_i[vfu] && insn_commit_i[vfu_result_id_i[vfu]];
     assign vrf_wen[vfu+NrOpQueue]      = 'b1;
     assign vrf_req_addr[vfu+NrOpQueue] = vfu_result_addr_i[vfu] >> $clog2(NrBank);
@@ -117,13 +117,13 @@ module vrf_accesser
   vrf_data_t [NrBank-1:0] arbit_bank_wdata;
   vrf_strb_t [NrBank-1:0] arbit_bank_wstrb;
 
-  logic [NrBank-1:0][NrOpQueue+NrLaneVFU-1:0] bank_req;
-  logic [NrOpQueue+NrLaneVFU-1:0][NrBank-1:0] bank_req_trans;
-  logic [NrBank-1:0][NrOpQueue+NrLaneVFU-1:0] bank_gnt;
-  logic [NrOpQueue+NrLaneVFU-1:0][NrBank-1:0] bank_gnt_trans;
+  logic [NrBank-1:0][NrOpQueue+NrWriteBackVFU-1:0] bank_req;
+  logic [NrOpQueue+NrWriteBackVFU-1:0][NrBank-1:0] bank_req_trans;
+  logic [NrBank-1:0][NrOpQueue+NrWriteBackVFU-1:0] bank_gnt;
+  logic [NrOpQueue+NrWriteBackVFU-1:0][NrBank-1:0] bank_gnt_trans;
   // Generate bank request from vrf request
   always_comb begin
-    for (int q = 0; q < NrOpQueue + NrLaneVFU; ++q) begin
+    for (int q = 0; q < NrOpQueue + NrWriteBackVFU; ++q) begin
       bank_req_trans[q]              = 'b0;
       bank_req_trans[q][bank_sel[q]] = vrf_req[q];
       for (int i = 0; i < NrBank; ++i) begin
@@ -142,8 +142,8 @@ module vrf_accesser
   } payload_t;
 
   // Workaround for `rr_arb_tree` which can't handle multiple data input
-  payload_t [NrOpQueue+NrLaneVFU-1:0] payload;
-  for (genvar i = 0; i < NrOpQueue + NrLaneVFU; ++i) begin : gen_payload
+  payload_t [NrOpQueue+NrWriteBackVFU-1:0] payload;
+  for (genvar i = 0; i < NrOpQueue + NrWriteBackVFU; ++i) begin : gen_payload
     assign payload[i].addr  = vrf_req_addr[i];
     assign payload[i].wen   = vrf_wen[i];
     assign payload[i].wdata = vrf_wdata[i];
@@ -153,7 +153,7 @@ module vrf_accesser
   // Arbitrate requests for bank conflicts
   for (genvar i = 0; i < NrBank; ++i) begin : gen_bank_req
     rr_arb_tree #(
-      .NumIn    (NrOpQueue + NrLaneVFU),
+      .NumIn    (NrOpQueue + NrWriteBackVFU),
       .DataWidth($bits(vrf_data_t) + $bits(vrf_strb_t) + $bits(bank_addr_t) + 1),
       .AxiVldRdy(1'b0)
     ) bank_req_arbiter (
@@ -221,7 +221,7 @@ module vrf_accesser
 
 `ifdef DUMP_VRF_ACCESS
   always_ff @(posedge clk_i) begin
-    for (int i = VALU; i < NrLaneVFU; i = i + 1) begin
+    for (int i = VALU; i < NrWriteBackVFU; i = i + 1) begin
       automatic vfu_e q = vfu_e'(i);
       if (vfu_result_gnt_o[i]) begin
         $display("[%0d][Lane%0d][VRFWrite] %s: addr:%0x, data:%0x, id:%0x", $time, LaneId, q.name(), vfu_result_addr_i[i],
@@ -229,7 +229,7 @@ module vrf_accesser
       end
     end
     for (int i = ALUA; i < NrOpQueue; i = i + 1) begin
-      automatic op_queue_e q = vfu_e'(i);
+      automatic op_queue_e q = op_queue_e'(i);
       if (rdata_valid_q[i]) begin
         $display("[%0d][Lane%0d][VRFRead] %s: addr:%0x, data:%0x", $time, LaneId, q.name(), (vrf_req_addr[i] << $clog2(NrBank)
                  ) + bank_sel[i] - 1, rdata[bank_sel_q[i]]);

@@ -24,14 +24,28 @@ module lane
   // Output store operand
   input  logic                      store_op_ready_i,
   output logic                      store_op_valid_o,
-  output vrf_data_t                 store_op_o
+  output vrf_data_t                 store_op_o,
+  // Input load value
+  input  logic                      load_op_valid_i,
+  output logic                      load_op_gnt_o,
+  input  vrf_data_t                 load_op_i,
+  input  vrf_strb_t                 load_op_strb_i,
+  input  vrf_addr_t                 load_op_addr_i,
+  input  insn_id_t                  load_id_i
 );
-  vrf_data_t [NrLaneVFU-1:0] vfu_result_wdata;
-  vrf_strb_t [NrLaneVFU-1:0] vfu_result_wstrb;
-  vrf_addr_t [NrLaneVFU-1:0] vfu_result_addr;
-  insn_id_t  [NrLaneVFU-1:0] vfu_result_id;
-  logic      [NrLaneVFU-1:0] vfu_result_valid;
-  logic      [NrLaneVFU-1:0] vfu_result_gnt;
+  vrf_data_t [NrWriteBackVFU-1:0] vfu_result_wdata;
+  vrf_strb_t [NrWriteBackVFU-1:0] vfu_result_wstrb;
+  vrf_addr_t [NrWriteBackVFU-1:0] vfu_result_addr;
+  insn_id_t  [NrWriteBackVFU-1:0] vfu_result_id;
+  logic      [NrWriteBackVFU-1:0] vfu_result_valid;
+  logic      [NrWriteBackVFU-1:0] vfu_result_gnt;
+
+  assign vfu_result_wdata[WB_VLU] = load_op_i;
+  assign vfu_result_wstrb[WB_VLU] = load_op_strb_i;
+  assign vfu_result_addr[WB_VLU]  = load_op_addr_i;
+  assign vfu_result_valid[WB_VLU] = load_op_valid_i;
+  assign vfu_result_id[WB_VLU]    = load_id_i;
+  assign load_op_gnt_o            = vfu_result_gnt[WB_VLU];
 
   logic      [NrOpQueue-1:0] op_ready;
   logic      [NrOpQueue-1:0] op_valid;
@@ -41,7 +55,9 @@ module lane
   assign store_op_o        = operand[StoreOp];
   assign op_ready[StoreOp] = store_op_ready_i;
 
-  vrf_accesser accesser (
+  vrf_accesser #(
+    .LaneId(LaneId)
+  ) accesser (
     .clk_i             (clk_i),
     .rst_ni            (rst_ni),
     // interface with `vinsn_launcher`
@@ -94,12 +110,12 @@ module lane
     .op_ready_o        (op_ready[ALUB:ALUA]),
     .alu_op_i          (operand[ALUB:ALUA]),
     // interface with `vrf_accesser`
-    .alu_result_wdata_o(vfu_result_wdata[VALU]),
-    .alu_result_wstrb_o(vfu_result_wstrb[VALU]),
-    .alu_result_addr_o (vfu_result_addr[VALU]),
-    .alu_result_id_o   (vfu_result_id[VALU]),
-    .alu_result_valid_o(vfu_result_valid[VALU]),
-    .alu_result_gnt_i  (vfu_result_gnt[VALU])
+    .alu_result_wdata_o(vfu_result_wdata[WB_VALU]),
+    .alu_result_wstrb_o(vfu_result_wstrb[WB_VALU]),
+    .alu_result_addr_o (vfu_result_addr[WB_VALU]),
+    .alu_result_id_o   (vfu_result_id[WB_VALU]),
+    .alu_result_valid_o(vfu_result_valid[WB_VALU]),
+    .alu_result_gnt_i  (vfu_result_gnt[WB_VALU])
   );
 
 endmodule : lane

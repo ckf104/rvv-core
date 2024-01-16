@@ -28,7 +28,11 @@ module rvv_core
   // Output store operands
   output logic                store_op_valid_o,
   output vrf_data_t           store_op_o,
-  input  logic                store_op_gnt_i
+  input  logic                store_op_gnt_i,
+  // Input load values
+  input  logic                load_op_valid_i,
+  input  vrf_data_t           load_op_i,
+  output logic                load_op_ready_o
 );
   assign result_o = {$bits(xlen_t) {1'b0}};
 
@@ -119,6 +123,13 @@ module rvv_core
   logic [NrLane-1:0] store_op_valid;
   vrf_data_t [NrLane-1:0] store_op;
 
+  logic [NrLane-1:0] load_op_valid;
+  logic [NrLane-1:0] load_op_gnt;
+  vrf_data_t [NrLane-1:0] load_op;
+  vrf_strb_t [NrLane-1:0] load_op_strb;
+  vrf_addr_t [NrLane-1:0] load_op_addr;
+  insn_id_t [NrLane-1:0] load_id;
+
   lanes lanes (
     .clk_i           (clk_i),
     .rst_ni          (rst_ni),
@@ -139,15 +150,22 @@ module rvv_core
     // Output store operand
     .store_op_ready_i(store_op_ready),
     .store_op_valid_o(store_op_valid),
-    .store_op_o      (store_op)
+    .store_op_o      (store_op),
+    // Input load value
+    .load_op_gnt_o   (load_op_gnt),
+    .load_op_valid_i (load_op_valid),
+    .load_op_i       (load_op),
+    .load_op_addr_i  (load_op_addr),
+    .load_op_strb_i  (load_op_strb),
+    .load_id_i       (load_id)
   );
 
-  vlsu vlsu (
+  vsu vsu (
     .clk_i           (clk_i),
     .rst_ni          (rst_ni),
     // Interface with `vinsn_launcher`
     .vfu_req_valid_i (vfu_req_valid),
-    .vfu_req_ready_o (vfu_ready[VLSU]),
+    .vfu_req_ready_o (vfu_ready[VSU]),
     .target_vfu_i    (target_vfu),
     .vfu_req_i       (vfu_req),
     // Interface with `vrf_accesser`
@@ -159,12 +177,36 @@ module rvv_core
     .store_op_valid_o(store_op_valid_o),
     .store_op_o      (store_op_o),
     // Interface with committer
-    .done_gnt_i      (vfu_done_gnt[VLSU]),
-    .done_o          (vfu_done[VLSU]),
-    .done_insn_id_o  (vfu_done_id[VLSU])
+    .done_gnt_i      (vfu_done_gnt[VSU]),
+    .done_o          (vfu_done[VSU]),
+    .done_insn_id_o  (vfu_done_id[VSU])
   );
 
-
+  vlu vlu (
+    .clk_i          (clk_i),
+    .rst_ni         (rst_ni),
+    // Interface with `vinsn_launcher`
+    .vfu_req_valid_i(vfu_req_valid),
+    .vfu_req_ready_o(vfu_ready[VLU]),
+    .target_vfu_i   (target_vfu),
+    .vfu_req_i      (vfu_req),
+    // Interface with the scalar core
+    .load_op_valid_i(load_op_valid_i),
+    .load_op_ready_o(load_op_ready_o),
+    .load_op_i      (load_op_i),
+    // Interface with `vrf_accesser`
+    // req/gnt nameing for accesser's generating vrf req iff valid signal is asserted.
+    .load_op_gnt_i  (load_op_gnt),
+    .load_op_valid_o(load_op_valid),
+    .load_op_o      (load_op),
+    .load_op_addr_o (load_op_addr),
+    .load_op_strb_o (load_op_strb),
+    .load_id_o      (load_id),
+    // Interface with committer
+    .done_gnt_i     (vfu_done_gnt[VLU]),
+    .done_o         (vfu_done[VLU]),
+    .done_insn_id_o (vfu_done_id[VLU])
+  );
 
 
 endmodule : rvv_core

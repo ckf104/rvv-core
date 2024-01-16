@@ -27,7 +27,11 @@ module stimulus_emitter
   output vec_context_t        vec_context_o,
   output logic                flush_o,
   output logic                insn_can_commit_o,
-  output insn_id_t            insn_can_commit_id_o
+  output insn_id_t            insn_can_commit_id_o,
+  // Load value
+  input  logic                load_op_ready_i,
+  output logic                load_op_valid_o,
+  output vrf_data_t           load_op_o
 );
   stimulus [NumStimulus-1:0] stim_array;
   vlen_t vle;
@@ -36,11 +40,24 @@ module stimulus_emitter
   logic [$clog2(NumStimulus+1)-1:0] cnt_q, cnt_d, sel;
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      cnt_q <= 'b0;
+      cnt_q      <= 'b0;
+      load_cnt_q <= 'b0;
     end else begin
-      cnt_q <= cnt_d;
+      cnt_q      <= cnt_d;
+      load_cnt_q <= load_cnt_d;
     end
   end
+
+  vrf_data_t load_cnt_d, load_cnt_q;
+
+  always_comb begin : load_value
+    load_op_o       = load_cnt_q;
+    load_cnt_d      = load_cnt_q;
+    load_op_valid_o = 1'b1;
+    if (load_op_ready_i && load_op_valid_o) begin
+      load_cnt_d = load_cnt_q + 1;
+    end
+  end : load_value
 
   always_comb begin
     cnt_d                = cnt_q;
@@ -58,7 +75,7 @@ module stimulus_emitter
   end
 
   initial begin
-    `CASE2
+    `CASE3
   end
 
 endmodule : stimulus_emitter
@@ -129,6 +146,9 @@ module verilator_test_top
   logic illegal_insn;
   xlen_t result;
 
+  logic load_op_valid, load_op_ready;
+  vrf_data_t load_op;
+
   stimulus_emitter emitter (
     .clk_i               (clk_i),
     .rst_ni              (rst_ni),
@@ -139,7 +159,11 @@ module verilator_test_top
     .vec_context_o       (vec_context),
     .flush_o             (flush),
     .insn_can_commit_o   (insn_can_commit),
-    .insn_can_commit_id_o(insn_can_commit_id)
+    .insn_can_commit_id_o(insn_can_commit_id),
+    // Output load value
+    .load_op_ready_i     (load_op_ready),
+    .load_op_valid_o     (load_op_valid),
+    .load_op_o           (load_op)
   );
 
   logic store_op_valid, store_op_gnt;
@@ -181,7 +205,11 @@ module verilator_test_top
     // Output store operands
     .store_op_valid_o    (store_op_valid),
     .store_op_o          (store_op),
-    .store_op_gnt_i      (store_op_gnt)
+    .store_op_gnt_i      (store_op_gnt),
+    // Load input operands
+    .load_op_valid_i     (load_op_valid),
+    .load_op_ready_o     (load_op_ready),
+    .load_op_i           (load_op)
   );
 
   always_ff @(posedge clk_i) begin

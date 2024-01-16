@@ -24,7 +24,14 @@ module lanes
   // Output store operand
   input  logic      [   NrLane-1:0] store_op_ready_i,
   output logic      [   NrLane-1:0] store_op_valid_o,
-  output vrf_data_t [   NrLane-1:0] store_op_o
+  output vrf_data_t [   NrLane-1:0] store_op_o,
+  // Input load value
+  input  logic      [   NrLane-1:0] load_op_valid_i,
+  output logic      [   NrLane-1:0] load_op_gnt_o,
+  input  vrf_data_t [   NrLane-1:0] load_op_i,
+  input  vrf_strb_t [   NrLane-1:0] load_op_strb_i,
+  input  vrf_addr_t [   NrLane-1:0] load_op_addr_i,
+  input  insn_id_t  [   NrLane-1:0] load_id_i
 );
   logic op_req_valid;
   logic [NrLane-1:0] op_req_ready;
@@ -69,7 +76,14 @@ module lanes
       // Output store operand
       .store_op_ready_i(store_op_ready_i[lane_id]),
       .store_op_valid_o(store_op_valid_o[lane_id]),
-      .store_op_o      (store_op_o[lane_id])
+      .store_op_o      (store_op_o[lane_id]),
+      // Input load value
+      .load_op_valid_i (load_op_valid_i[lane_id]),
+      .load_op_gnt_o   (load_op_gnt_o[lane_id]),
+      .load_op_i       (load_op_i[lane_id]),
+      .load_op_strb_i  (load_op_strb_i[lane_id]),
+      .load_op_addr_i  (load_op_addr_i[lane_id]),
+      .load_id_i       (load_id_i[lane_id])
     );
   end : gen_lane
 

@@ -83,6 +83,7 @@ package rvv_pkg;
 
   localparam OpcodeVec = 7'b10_101_11;
   localparam OpcodeStoreFP = 7'b01_001_11;  // opecode of vector store is the same as float store
+  localparam OpcodeLoadFP = 7'b00_001_11;   // opecode of vector load is the same as float load
 
 // verilator lint_off UNUSEDPARAM
 endpackage : rvv_pkg
