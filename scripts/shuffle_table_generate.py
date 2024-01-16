@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 
 import argparse
+import os
 
 parser = argparse.ArgumentParser(description='Generate lookup table for mem shuffle')
 parser.add_argument('--deshuffle', action='store_true', help='generate deshuffle table')
@@ -53,6 +54,9 @@ def generate_table(sew, nr_lane):
             print_table(deshuffle_table, False, width, file)
         else:
             print_table(shuffle_table, True, width, file)
+
+if not os.path.isdir(args.dir):
+    os.makedirs(args.dir)
 
 for sew in [8, 16, 32, 64]:
     for nr_lane in [2, 4, 8, 16]:
