@@ -30,7 +30,7 @@ module vsu
   logic [NrLane-1:0] op_in_buf_empty, op_in_buf_full;
   logic [NrLane-1:0] store_op_valid, store_op_gnt;
   vrf_data_t [NrLane-1:0] store_op, shuffled_store_op;
-  vrf_strb_t [NrLane-1:0] mask, mask_d, mask_q;
+  // vrf_strb_t [NrLane-1:0] mask, mask_d, mask_q;
 
   assign store_op_ready_o = ~op_in_buf_full;
   assign store_op_valid   = ~op_in_buf_empty;
@@ -54,7 +54,9 @@ module vsu
       .data_o    (store_op[i]),
       .pop_i     (store_op_gnt[i]),
       .empty_o   (op_in_buf_empty[i]),
+      // verilator lint_off PINCONNECTEMPTY
       .usage_o   ()
+      // verilator lint_on PINCONNECTEMPTY
     );
   end
 
@@ -70,7 +72,9 @@ module vsu
     .sew   (vfu_req_q.vew),
     // Output data
     .data_o(shuffled_store_op),
-    .mask_o(mask)
+    // verilator lint_off PINCONNECTEMPTY
+    .mask_o()
+    // verilator lint_on PINCONNECTEMPTY
   );
 
   typedef enum logic [1:0] {
@@ -85,12 +89,12 @@ module vsu
       // don't need to reset `vfu_req_q`
       op_cnt_q <= 'b0;
       state_q  <= IDLE;
-      mask_q   <= 'b0;
+      // mask_q   <= 'b0;
     end else begin
       vfu_req_q <= vfu_req_d;
       op_cnt_q  <= op_cnt_d;
       state_q   <= state_d;
-      mask_q    <= mask_d;
+      // mask_q    <= mask_d;
     end
   end
 
@@ -105,8 +109,8 @@ module vsu
     done_insn_id_o   = vfu_req_q.insn_id;
     store_op_gnt     = 'b0;
 
-    mask_d           = mask_q;
-    if (op_cnt_q == 'b0) mask_d = mask;
+    // mask_d           = mask_q;
+    // if (op_cnt_q == 'b0) mask_d = mask;
 
     unique case (state_q)
       IDLE: begin
@@ -130,8 +134,8 @@ module vsu
           if (vfu_req_q.vlB <= VRFWordWidthB[$bits(vlen_t)-1:0]) begin
             // vfu_req_d.vlB = 'b0;
             // reset operand selection signal
-            op_cnt_d = 'b0;
-            for (int unsigned i = 0; i < NrLane; ++i) store_op_gnt[i] = |mask_d[i];
+            // op_cnt_d = 'b0;
+            // for (int unsigned i = 0; i < NrLane; ++i) store_op_gnt[i] = |mask_d[i];
             done_o          = 1'b1;
             // mask_d = 'b0;
 
