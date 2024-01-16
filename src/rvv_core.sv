@@ -15,6 +15,7 @@ module rvv_core
   output logic                ready_o,
   input  logic         [31:0] insn_i,
   input  insn_id_t            insn_id_i,
+  input  xlen_t               scalar_reg_i,
   input  vec_context_t        vec_context_i,
   // Interface with control logic of scalar core
   input  logic                flush_i,
