@@ -4,7 +4,7 @@ module valu_wrapper
   import core_pkg::*;
   import rvv_pkg::*;
 #(
-  parameter int unsigned LaneId = 0,
+  parameter int unsigned LaneId        = 0,
   parameter int unsigned ALUOpBufDepth = 4,
   parameter int unsigned ALUWBufDepth  = 2
 ) (
@@ -18,7 +18,6 @@ module valu_wrapper
   // interface with `vinsn_launcher`
   output logic            alu_done_o,
   output insn_id_t        alu_done_id_o,
-  input  logic            alu_done_gnt_i,
   // interface with `vrf_accesser`
   input  logic      [1:0] op_valid_i,
   output logic      [1:0] op_ready_o,
@@ -33,8 +32,7 @@ module valu_wrapper
 );
   typedef enum logic [1:0] {
     IDLE,
-    WORKING,
-    WAITING
+    WORKING
   } state_e;
   state_e state_q, state_d;
 
@@ -107,10 +105,9 @@ module valu_wrapper
           vfu_req_d.waddr = vfu_req_q.waddr + 1;
           vfu_req_d.vlB   = vfu_req_q.vlB - VRFWordWidthB[$bits(vlen_t)-1:0];
           if (vfu_req_q.vlB <= VRFWordWidthB[$bits(vlen_t)-1:0]) begin
-            alu_done_o = 1'b1;
-            if (!alu_done_gnt_i) begin
-              state_d = WAITING;
-            end else if (vfu_req_valid_i && target_vfu_i == VALU) begin
+            alu_done_o      = 1'b1;
+            vfu_req_ready_o = 1'b1;
+            if (vfu_req_valid_i && target_vfu_i == VALU) begin
               vfu_req_d     = vfu_req_i;
               vfu_req_d.vlB = vfu_req_i.vlB >> LogNrLane;
               commit_cnt_d  = vfu_req_d.vlB;
@@ -120,19 +117,7 @@ module valu_wrapper
           end
         end
       end
-      WAITING: begin
-        alu_done_o = 1'b1;
-        if (alu_done_gnt_i) begin
-          if (vfu_req_valid_i && target_vfu_i == VALU) begin
-            vfu_req_d     = vfu_req_i;
-            vfu_req_d.vlB = vfu_req_i.vlB >> LogNrLane;
-            commit_cnt_d  = vfu_req_d.vlB;
-            state_d       = WORKING;
-          end else begin
-            state_d = IDLE;
-          end
-        end
-      end
+
     endcase
   end
 

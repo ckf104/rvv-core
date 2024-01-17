@@ -25,7 +25,6 @@ module vlu
   output vrf_strb_t [NrLane-1:0] load_op_strb_o,
   output insn_id_t  [NrLane-1:0] load_id_o,
   // Interface with committer
-  input  logic                   done_gnt_i,
   output logic                   done_o,
   output insn_id_t               done_insn_id_o
 );
@@ -148,8 +147,7 @@ module vlu
 
   typedef enum logic [1:0] {
     IDLE,
-    LOAD,
-    WAIT
+    LOAD
   } state_e;
   state_e state_q, state_d;
 
@@ -197,23 +195,10 @@ module vlu
 
             // Received `vfu_req_valid_i` depends on `vfu_req_ready_o`, therefore we
             // can't set `vfu_req_ready_o` according to `vfu_req_valid_i`.
-            vfu_req_ready_o = done_gnt_i;
-            if (!done_gnt_i) state_d = WAIT;
-            else if (vfu_req_valid_i && target_vfu_i == VLU) vfu_req_d = vfu_req_i;
+            vfu_req_ready_o = 1'b1;
+            if (vfu_req_valid_i && target_vfu_i == VLU) vfu_req_d = vfu_req_i;
             else state_d = IDLE;
           end
-        end
-      end
-      WAIT: begin
-        done_o          = 1'b1;
-        // Received `vfu_req_valid_i` depends on `vfu_req_ready_o`, therefore we
-        // can't set `vfu_req_ready_o` according to `vfu_req_valid_i`.
-        vfu_req_ready_o = done_gnt_i;
-        if (done_gnt_i) begin
-          if (vfu_req_valid_i && target_vfu_i == VLU) begin
-            vfu_req_d = vfu_req_i;
-            state_d   = LOAD;
-          end else state_d = IDLE;
         end
       end
     endcase

@@ -83,7 +83,6 @@ module rvv_core
 
   logic [NrVFU-1:0] vfu_done;
   insn_id_t [NrVFU-1:0] vfu_done_id;
-  logic [NrVFU-1:0] vfu_done_gnt;
 
   logic [InsnIDNum-1:0] insn_can_commit;
 
@@ -113,7 +112,6 @@ module rvv_core
     .illegal_insn_o      (illegal_insn_o),
     .vfu_done_i          (vfu_done),
     .vfu_done_id_i       (vfu_done_id),
-    .vfu_done_gnt_o      (vfu_done_gnt),
     // commit control signals used by `vrf_accesser`
     .insn_can_commit_i   (insn_can_commit_i),
     .insn_can_commit_id_i(insn_can_commit_id_i),
@@ -147,7 +145,6 @@ module rvv_core
     // Interface between `vfus` and `vinsn_launcher`
     .vfus_done_o     (vfu_done[NrLaneVFU-1:0]),
     .vfus_done_id_o  (vfu_done_id[NrLaneVFU-1:0]),
-    .vfus_done_gnt_i (vfu_done_gnt[NrLaneVFU-1:0]),
     // Output store operand
     .store_op_ready_i(store_op_ready),
     .store_op_valid_o(store_op_valid),
@@ -178,7 +175,6 @@ module rvv_core
     .store_op_valid_o(store_op_valid_o),
     .store_op_o      (store_op_o),
     // Interface with committer
-    .done_gnt_i      (vfu_done_gnt[VSU]),
     .done_o          (vfu_done[VSU]),
     .done_insn_id_o  (vfu_done_id[VSU])
   );
@@ -204,7 +200,6 @@ module rvv_core
     .load_op_strb_o (load_op_strb),
     .load_id_o      (load_id),
     // Interface with committer
-    .done_gnt_i     (vfu_done_gnt[VLU]),
     .done_o         (vfu_done[VLU]),
     .done_insn_id_o (vfu_done_id[VLU])
   );

@@ -29,7 +29,6 @@ module vinsn_launcher
   output logic                       illegal_insn_o,
   input  logic       [    NrVFU-1:0] vfu_done_i,
   input  insn_id_t   [    NrVFU-1:0] vfu_done_id_i,
-  output logic       [    NrVFU-1:0] vfu_done_gnt_o,
   // commit control signals used by `vrf_accesser`
   input  logic                       insn_can_commit_i,
   input  insn_id_t                   insn_can_commit_id_i,
@@ -158,7 +157,6 @@ module vinsn_launcher
     // interface with `vfus`
     .vfu_done_i          (vfu_done_i),
     .vfu_done_id_i       (vfu_done_id_i),
-    .vfu_done_gnt_o      (vfu_done_gnt_o),
     // commit control signals used by `vrf_accesser`
     .insn_can_commit_i   (insn_can_commit_i),
     .insn_can_commit_id_i(insn_can_commit_id_i),

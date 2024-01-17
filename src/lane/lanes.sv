@@ -20,7 +20,6 @@ module lanes
   // Interface between `vfus` and `vinsn_launcher`
   output logic      [NrLaneVFU-1:0] vfus_done_o,
   output insn_id_t  [NrLaneVFU-1:0] vfus_done_id_o,
-  input  logic      [NrLaneVFU-1:0] vfus_done_gnt_i,
   // Output store operand
   input  logic      [   NrLane-1:0] store_op_ready_i,
   output logic      [   NrLane-1:0] store_op_valid_o,
@@ -40,7 +39,6 @@ module lanes
 
   logic [NrLane-1:0][NrLaneVFU-1:0] vfus_done;
   insn_id_t [NrLane-1:0][NrLaneVFU-1:0] vfus_done_id;
-  logic [NrLane-1:0][NrLaneVFU-1:0] vfus_done_gnt;
 
   // Synchronize signals of each lane
   always_comb begin
@@ -48,9 +46,8 @@ module lanes
     op_req_valid    = op_req_valid_i & op_req_ready_o;
     vfu_req_ready_o = &vfu_req_ready;
     vfu_req_valid   = vfu_req_ready_o & vfu_req_valid_i;
-    vfus_done_o     = &vfus_done;
     vfus_done_id_o  = vfus_done_id[0];
-    for (int unsigned i = 0; i < NrLane; ++i) vfus_done_gnt[i] = vfus_done_gnt_i;
+    for (int unsigned i = 0; i < NrLaneVFU; ++i) vfus_done_o[i] = &vfus_done[i];
   end
 
   for (genvar lane_id = 0; lane_id < NrLane; lane_id++) begin : gen_lane
@@ -72,7 +69,6 @@ module lanes
       // Interface between `vfus` and `vinsn_launcher`
       .vfus_done_o     (vfus_done[lane_id]),
       .vfus_done_id_o  (vfus_done_id[lane_id]),
-      .vfus_done_gnt_i (vfus_done_gnt[lane_id]),
       // Output store operand
       .store_op_ready_i(store_op_ready_i[lane_id]),
       .store_op_valid_o(store_op_valid_o[lane_id]),

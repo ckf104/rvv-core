@@ -20,7 +20,6 @@ module lane
   // Interface between `vfus` and `vinsn_launcher`
   output logic      [NrLaneVFU-1:0] vfus_done_o,
   output insn_id_t  [NrLaneVFU-1:0] vfus_done_id_o,
-  input  logic      [NrLaneVFU-1:0] vfus_done_gnt_i,
   // Output store operand
   input  logic                      store_op_ready_i,
   output logic                      store_op_valid_o,
@@ -104,7 +103,6 @@ module lane
     // interface with `vinsn_launcher`
     .alu_done_o        (vfus_done_o[VALU]),
     .alu_done_id_o     (vfus_done_id_o[VALU]),
-    .alu_done_gnt_i    (vfus_done_gnt_i),
     // interface with `vrf_accesser`
     .op_valid_i        (op_valid[ALUB:ALUA]),
     .op_ready_o        (op_ready[ALUB:ALUA]),
