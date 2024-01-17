@@ -2,7 +2,7 @@
 `include "rvv_pkg.svh"
 `include "core_pkg.svh"
 
-`define GENERATE_CASE2
+`define GENERATE_CASE4
 `include "test_case.svh"
 
 import core_pkg::insn_id_t;
@@ -75,7 +75,7 @@ module stimulus_emitter
   end
 
   initial begin
-    `CASE3
+    `CASE4
   end
 
 endmodule : stimulus_emitter
@@ -192,6 +192,7 @@ module verilator_test_top
     .insn_i              (insn),
     .insn_id_i           (insn_id),
     .vec_context_i       (vec_context),
+    .scalar_reg_i        ('b0),
     // Interface with control logic of scalar core
     .flush_i             (flush),
     .insn_can_commit_i   (insn_can_commit),
