@@ -46,8 +46,10 @@ module lanes
     op_req_valid    = op_req_valid_i & op_req_ready_o;
     vfu_req_ready_o = &vfu_req_ready;
     vfu_req_valid   = vfu_req_ready_o & vfu_req_valid_i;
+    // TODO: done signals will be asserted for one cycle, can we ensure that
+    // all of lanes will complete at the same time?
     vfus_done_id_o  = vfus_done_id[0];
-    for (int unsigned i = 0; i < NrLaneVFU; ++i) vfus_done_o[i] = &vfus_done[i];
+    for (int unsigned i = 0; i < NrLaneVFU; ++i) vfus_done_o[i] = vfus_done[0];
   end
 
   for (genvar lane_id = 0; lane_id < NrLane; lane_id++) begin : gen_lane

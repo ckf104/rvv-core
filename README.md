@@ -6,6 +6,7 @@
 ## TODO List
 
 * 处理指令访问的数据总数不是 8*NrLane Bytes 的倍数的情况
+* 同步各个 lane 的 done 信号
 * **在 `vinsn_launcher` 中增加冒险，依赖检测**
 * 增加标量寄存器的传输接口（在 rvv1.0 中，只有 vsetvl，vlse, vsse 三种指令会用到两个标量寄存器，但在目前的设计考虑中这三种指令都应该在 scalar cpu 中完成），并实现相应的传输指令。
 * 处理 flush_i 信号
