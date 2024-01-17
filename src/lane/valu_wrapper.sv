@@ -18,6 +18,8 @@ module valu_wrapper
   // interface with `vinsn_launcher`
   output logic            alu_done_o,
   output insn_id_t        alu_done_id_o,
+  output logic            alu_use_vd_o,
+  output vreg_t           alu_vd_o,
   // interface with `vrf_accesser`
   input  logic      [1:0] op_valid_i,
   output logic      [1:0] op_ready_o,
@@ -78,6 +80,9 @@ module valu_wrapper
     vfu_req_ready_o  = 1'b0;
     alu_done_o       = 1'b0;
     alu_done_id_o    = vfu_req_q.insn_id;
+    // ALU instruction always write back vd;
+    alu_use_vd_o     = 1'b1;
+    alu_vd_o         = vfu_req_q.vd;
     alu_result_valid = 1'b0;
     commit_cnt_d     = commit_cnt_q;
     state_d          = state_q;

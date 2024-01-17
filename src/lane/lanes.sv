@@ -17,9 +17,13 @@ module lanes
   output logic                      vfu_req_ready_o,
   input  vfu_req_t                  vfu_req_i,
   input  vfu_e                      target_vfu_i,
-  // Interface between `vfus` and `vinsn_launcher`
+  // done signals from vfus and `vrf_accessser`
   output logic      [NrLaneVFU-1:0] vfus_done_o,
   output insn_id_t  [NrLaneVFU-1:0] vfus_done_id_o,
+  output logic      [NrLaneVFU-1:0] vfus_use_vd_o,
+  output vreg_t     [NrLaneVFU-1:0] vfus_vd_o,
+  output logic      [NrOpQueue-1:0] op_access_done_o,
+  output vreg_t     [NrOpQueue-1:0] op_access_vs_o,
   // Output store operand
   input  logic      [   NrLane-1:0] store_op_ready_i,
   output logic      [   NrLane-1:0] store_op_valid_o,
@@ -37,19 +41,26 @@ module lanes
   logic vfu_req_valid;
   logic [NrLane-1:0] vfu_req_ready;
 
-  logic [NrLane-1:0][NrLaneVFU-1:0] vfus_done;
+  logic [NrLane-1:0][NrLaneVFU-1:0] vfus_done, vfus_use_vd;
   insn_id_t [NrLane-1:0][NrLaneVFU-1:0] vfus_done_id;
+  vreg_t [NrLane-1:0][NrLaneVFU-1:0] vfus_vd;
+  logic [NrLane-1:0][NrOpQueue-1:0] op_access_done;
+  vreg_t [NrLane-1:0][NrOpQueue-1:0] op_access_vs;
 
   // Synchronize signals of each lane
   always_comb begin
-    op_req_ready_o  = &op_req_ready;
-    op_req_valid    = op_req_valid_i & op_req_ready_o;
-    vfu_req_ready_o = &vfu_req_ready;
-    vfu_req_valid   = vfu_req_ready_o & vfu_req_valid_i;
+    op_req_ready_o   = &op_req_ready;
+    op_req_valid     = op_req_valid_i & op_req_ready_o;
+    vfu_req_ready_o  = &vfu_req_ready;
+    vfu_req_valid    = vfu_req_ready_o & vfu_req_valid_i;
     // TODO: done signals will be asserted for one cycle, can we ensure that
     // all of lanes will complete at the same time?
-    vfus_done_id_o  = vfus_done_id[0];
-    for (int unsigned i = 0; i < NrLaneVFU; ++i) vfus_done_o[i] = vfus_done[0];
+    vfus_done_id_o   = vfus_done_id[0];
+    vfus_done_o      = vfus_done[0];
+    vfus_vd_o        = vfus_vd[0];
+    vfus_use_vd_o    = vfus_use_vd[0];
+    op_access_done_o = op_access_done[0];
+    op_access_vs_o   = op_access_vs[0];
   end
 
   for (genvar lane_id = 0; lane_id < NrLane; lane_id++) begin : gen_lane
@@ -71,6 +82,10 @@ module lanes
       // Interface between `vfus` and `vinsn_launcher`
       .vfus_done_o     (vfus_done[lane_id]),
       .vfus_done_id_o  (vfus_done_id[lane_id]),
+      .vfus_use_vd_o   (vfus_use_vd[lane_id]),
+      .vfus_vd_o       (vfus_vd[lane_id]),
+      .op_access_done_o(op_access_done[lane_id]),
+      .op_access_vs_o  (op_access_vs[lane_id]),
       // Output store operand
       .store_op_ready_i(store_op_ready_i[lane_id]),
       .store_op_valid_o(store_op_valid_o[lane_id]),

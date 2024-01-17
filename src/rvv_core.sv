@@ -43,19 +43,6 @@ module rvv_core
 
   assign ready_o = decoder_ready;
 
-  // TODO: We restrict that only one instruction can run at one time. This
-  // will be fixed by hazard detecting mechanism
-  logic has_running_insn_q, has_running_insn_d;
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) has_running_insn_q <= 'b0;
-    else has_running_insn_q <= has_running_insn_d;
-  end
-  always_comb begin
-    has_running_insn_d = has_running_insn_q;
-    if (launcher_ready && decoded_insn_valid) has_running_insn_d = 1'b1;
-    if (done_o) has_running_insn_d = 1'b0;
-  end
-
   vinsn_decoder decoder (
     .clk_i         (clk_i),
     .rst_ni        (rst_ni),
@@ -66,7 +53,7 @@ module rvv_core
     .insn_id_i     (insn_id_i),
     .vec_context_i (vec_context_i),
     // Interface with `vinsn_launcher`
-    .req_ready_i   (launcher_ready && !has_running_insn_q),
+    .req_ready_i   (launcher_ready),
     .req_valid_o   (decoded_insn_valid),
     .issue_req_o   (decoded_insn),
     .illegal_insn_o(decoded_insn_illegal)
@@ -81,8 +68,12 @@ module rvv_core
   logic lane_opqueue_req_valid;
   op_req_t lane_opqueue_req;
 
-  logic [NrVFU-1:0] vfu_done;
+  logic [NrVFU-1:0] vfu_done, vfu_use_vd;
   insn_id_t [NrVFU-1:0] vfu_done_id;
+  vreg_t [NrVFU-1:0] vfu_vd;
+
+  logic [NrOpQueue-1:0] op_access_done;
+  vreg_t [NrOpQueue-1:0] op_access_vs;
 
   logic [InsnIDNum-1:0] insn_can_commit;
 
@@ -90,7 +81,7 @@ module rvv_core
     .clk_i               (clk_i),
     .rst_ni              (rst_ni),
     // Interface with `vinsn_decoder`
-    .issue_req_valid_i   (decoded_insn_valid && !has_running_insn_q),
+    .issue_req_valid_i   (decoded_insn_valid),
     .issue_req_ready_o   (launcher_ready),
     .issue_req_i         (decoded_insn),
     // Interface with `valu_wrapper`
@@ -110,8 +101,13 @@ module rvv_core
     .done_o              (done_o),
     .done_insn_id_o      (done_insn_id_o),
     .illegal_insn_o      (illegal_insn_o),
+    // done signals from vfus and `vrf_accessser`
     .vfu_done_i          (vfu_done),
     .vfu_done_id_i       (vfu_done_id),
+    .vfu_use_vd_i        (vfu_use_vd),
+    .vfu_vd_i            (vfu_vd),
+    .op_access_done_i    (op_access_done),
+    .op_access_vs_i      (op_access_vs),
     // commit control signals used by `vrf_accesser`
     .insn_can_commit_i   (insn_can_commit_i),
     .insn_can_commit_id_i(insn_can_commit_id_i),
@@ -145,6 +141,10 @@ module rvv_core
     // Interface between `vfus` and `vinsn_launcher`
     .vfus_done_o     (vfu_done[NrLaneVFU-1:0]),
     .vfus_done_id_o  (vfu_done_id[NrLaneVFU-1:0]),
+    .vfus_use_vd_o   (vfu_use_vd[NrLaneVFU-1:0]),
+    .vfus_vd_o       (vfu_vd[NrLaneVFU-1:0]),
+    .op_access_done_o(op_access_done),
+    .op_access_vs_o  (op_access_vs),
     // Output store operand
     .store_op_ready_i(store_op_ready),
     .store_op_valid_o(store_op_valid),
@@ -176,7 +176,9 @@ module rvv_core
     .store_op_o      (store_op_o),
     // Interface with committer
     .done_o          (vfu_done[VSU]),
-    .done_insn_id_o  (vfu_done_id[VSU])
+    .done_insn_id_o  (vfu_done_id[VSU]),
+    .insn_use_vd_o   (vfu_use_vd[VSU]),
+    .insn_vd_o       (vfu_vd[VSU])
   );
 
   vlu vlu (
@@ -201,7 +203,9 @@ module rvv_core
     .load_id_o      (load_id),
     // Interface with committer
     .done_o         (vfu_done[VLU]),
-    .done_insn_id_o (vfu_done_id[VLU])
+    .done_insn_id_o (vfu_done_id[VLU]),
+    .insn_use_vd_o  (vfu_use_vd[VLU]),
+    .insn_vd_o      (vfu_vd[VLU])
   );
 
 

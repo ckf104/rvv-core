@@ -24,7 +24,9 @@ module vsu
   output vrf_data_t              store_op_o,
   // Interface with committer
   output logic                   done_o,
-  output insn_id_t               done_insn_id_o
+  output insn_id_t               done_insn_id_o,
+  output logic                   insn_use_vd_o,
+  output vreg_t                  insn_vd_o
 );
   logic [NrLane-1:0] op_in_buf_empty, op_in_buf_full;
   logic [NrLane-1:0] store_op_valid, store_op_gnt;
@@ -105,6 +107,8 @@ module vsu
     store_op_valid_o = 1'b0;
     done_o           = 1'b0;
     done_insn_id_o   = vfu_req_q.insn_id;
+    insn_use_vd_o    = 1'b0;  // Store instruction don't write back
+    insn_vd_o        = 'b0;
     store_op_gnt     = 'b0;
 
     // mask_d           = mask_q;

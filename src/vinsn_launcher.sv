@@ -27,8 +27,13 @@ module vinsn_launcher
   output logic                       done_o,
   output insn_id_t                   done_insn_id_o,
   output logic                       illegal_insn_o,
+  // done signals from vfus and `vrf_accessser`
   input  logic       [    NrVFU-1:0] vfu_done_i,
   input  insn_id_t   [    NrVFU-1:0] vfu_done_id_i,
+  input  logic       [    NrVFU-1:0] vfu_use_vd_i,
+  input  vreg_t      [    NrVFU-1:0] vfu_vd_i,
+  input  logic       [NrOpQueue-1:0] op_access_done_i,
+  input  vreg_t      [NrOpQueue-1:0] op_access_vs_i,
   // commit control signals used by `vrf_accesser`
   input  logic                       insn_can_commit_i,
   input  insn_id_t                   insn_can_commit_id_i,
@@ -67,11 +72,28 @@ module vinsn_launcher
     end
   end
 
+  logic stall;  // Stall due to hazard.
+
+  scoreboard scoreboard (
+    .clk_i           (clk_i),
+    .rst_ni          (rst_ni),
+    .issue_req_i     (issue_req_i),
+    .issue_req_gnt_i (issue_req_ready_o && issue_req_valid_i),
+    .op_access_done_i(op_access_done_i),
+    .op_access_vs_i  (op_access_vs_i),
+    .insn_done_i     (vfu_done_i),
+    .insn_use_vd_i   (vfu_use_vd_i),
+    .insn_vd_i       (vfu_vd_i),
+    .insn_done_id_i  (vfu_done_id_i),
+    .stall           (stall)
+  );
+
   always_comb begin : gen_req_ready
     issue_req_ready_o = 1'b0;
     if ((!vfu_req_valid_o || vfu_req_ready_i[target_vfu_o]) && (!op_req_valid_o || op_req_ready_i)) begin
       issue_req_ready_o = 1'b1;
     end
+    if (stall) issue_req_ready_o = 1'b0;
   end
 
   always_comb begin : req_mask
@@ -115,7 +137,7 @@ module vinsn_launcher
     target_vfu_d    = target_vfu_q;
 
     if (vfu_req_ready_i[target_vfu] || !vfu_req_valid_q) begin
-      vfu_req_valid_d     = issue_req_valid_i & vfu_req_mask_d;
+      vfu_req_valid_d     = issue_req_valid_i & vfu_req_mask_d & ~stall;
 
       vfu_req_d.vop       = issue_req_i.vop;
       vfu_req_d.vew       = issue_req_i.vew;
@@ -124,6 +146,7 @@ module vinsn_launcher
       vfu_req_d.waddr     = GetVRFAddr(issue_req_i.vd);
       vfu_req_d.scalar_op = issue_req_i.scalar_op;
       vfu_req_d.insn_id   = issue_req_i.insn_id;
+      vfu_req_d.vd        = issue_req_i.vd;
       target_vfu_d        = target_vfu;
     end
   end : gen_vfu_req
@@ -133,7 +156,7 @@ module vinsn_launcher
     op_req_d       = op_req_q;
 
     if (op_req_ready_i || !op_req_valid_q) begin
-      op_req_valid_d     = issue_req_valid_i & op_req_mask_d;
+      op_req_valid_d     = issue_req_valid_i & op_req_mask_d & ~stall;
 
       op_req_d.vs1       = issue_req_i.vs1;
       op_req_d.vs2       = issue_req_i.vs2;

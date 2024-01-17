@@ -5,7 +5,7 @@
 `include "riscv_pkg.svh"
 
 package core_pkg;
-// verilator lint_off UNUSEDPARAM
+  // verilator lint_off UNUSEDPARAM
 
   localparam int unsigned ELEN = 64;
   localparam int unsigned ELENB = ELEN / 8;
@@ -129,7 +129,8 @@ package core_pkg;
     vop_e          vop;
     vlen_t         vlB;
     rvv_pkg::vew_e vew;
-    logic [1:0]    use_vs;
+    logic [1:0]    use_vs;     // whether this instruction will read vs1, vs2 register
+    logic          use_vd;     // whether this instruction will write vd register
     vrf_data_t     scalar_op;
     insn_id_t      insn_id;
     // indicate a new req;
@@ -153,6 +154,7 @@ package core_pkg;
     vrf_addr_t     waddr;
     vrf_data_t     scalar_op;
     insn_id_t      insn_id;
+    vreg_t         vd;
   } vfu_req_t;
 
   // It may be not necessary for only memory
@@ -190,7 +192,7 @@ package core_pkg;
     return (num_idx > 32'd1) ? unsigned'($clog2(num_idx)) : 32'd1;
   endfunction
 
-// verilator lint_on UNUSEDPARAM
+  // verilator lint_on UNUSEDPARAM
 endpackage : core_pkg
 
 `endif  // _CORE_PKG_SVH

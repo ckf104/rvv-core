@@ -24,9 +24,11 @@ module vlu
   output vrf_addr_t [NrLane-1:0] load_op_addr_o,
   output vrf_strb_t [NrLane-1:0] load_op_strb_o,
   output insn_id_t  [NrLane-1:0] load_id_o,
-  // Interface with committer
+  // Interface with committer and scoreboard
   output logic                   done_o,
-  output insn_id_t               done_insn_id_o
+  output insn_id_t               done_insn_id_o,
+  output logic                   insn_use_vd_o,
+  output vreg_t                  insn_vd_o
 );
   // logic [NrLane-1:0] op_in_buf_empty, op_in_buf_full;
   logic [NrLane-1:0] load_op_valid, load_op_gnt;
@@ -177,6 +179,8 @@ module vlu
     vfu_req_ready_o = 1'b0;
     done_o          = 1'b0;
     done_insn_id_o  = vfu_req_q.insn_id;
+    insn_use_vd_o   = 1'b1;
+    insn_vd_o       = vfu_req_q.vd;
 
     unique case (state_q)
       IDLE: begin

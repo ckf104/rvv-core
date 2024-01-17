@@ -7,30 +7,39 @@ module vrf_accesser
 #(
   parameter int unsigned LaneId = 0
 ) (
-  input  logic                             clk_i,
-  input  logic                             rst_ni,
+  input  logic                           clk_i,
+  input  logic                           rst_ni,
   // interface with `vinsn_launcher`
-  input  logic                             req_valid_i,
-  output logic                             req_ready_o,
-  input  op_req_t                          op_req_i,
-  input  logic      [       InsnIDNum-1:0] insn_commit_i,
+  input  logic                           req_valid_i,
+  output logic                           req_ready_o,
+  input  op_req_t                        op_req_i,
+  input  logic      [     InsnIDNum-1:0] insn_commit_i,
   // interface with `vfus`
-  input  vrf_data_t [  NrWriteBackVFU-1:0] vfu_result_wdata_i,
-  input  vrf_strb_t [  NrWriteBackVFU-1:0] vfu_result_wstrb_i,
-  input  vrf_addr_t [  NrWriteBackVFU-1:0] vfu_result_addr_i,
-  input  insn_id_t  [  NrWriteBackVFU-1:0] vfu_result_id_i,
-  input  logic      [  NrWriteBackVFU-1:0] vfu_result_valid_i,
-  output logic      [  NrWriteBackVFU-1:0] vfu_result_gnt_o,
+  input  vrf_data_t [NrWriteBackVFU-1:0] vfu_result_wdata_i,
+  input  vrf_strb_t [NrWriteBackVFU-1:0] vfu_result_wstrb_i,
+  input  vrf_addr_t [NrWriteBackVFU-1:0] vfu_result_addr_i,
+  input  insn_id_t  [NrWriteBackVFU-1:0] vfu_result_id_i,
+  input  logic      [NrWriteBackVFU-1:0] vfu_result_valid_i,
+  output logic      [NrWriteBackVFU-1:0] vfu_result_gnt_o,
   // output operands
-  input  logic      [       NrOpQueue-1:0] op_ready_i,
-  output logic      [       NrOpQueue-1:0] op_valid_o,
-  output vrf_data_t [       NrOpQueue-1:0] operand_o
+  input  logic      [     NrOpQueue-1:0] op_ready_i,
+  output logic      [     NrOpQueue-1:0] op_valid_o,
+  output vrf_data_t [     NrOpQueue-1:0] operand_o,
+  // vrf data access done
+  output logic      [     NrOpQueue-1:0] op_access_done_o,
+  output vreg_t     [     NrOpQueue-1:0] op_access_vs_o
 );
+  typedef enum logic {
+    IDLE,
+    WORKING
+  } state_e;
+
   // part 0: shuffle req into each operand queue
   logic [NrOpQueue-1:0] op_queue_req;
   logic [NrOpQueue-1:0] op_queue_ready;
   vrf_addr_t vs1_addr, vs2_addr;
   vrf_addr_t [NrOpQueue-1:0] op_queue_req_addr;
+  vreg_t [NrOpQueue-1:0] op_queue_req_vs;
 
   lane_vlen_t new_vl;
 
@@ -46,6 +55,9 @@ module vrf_accesser
     op_queue_req_addr[ALUA]    = vs1_addr;
     op_queue_req_addr[ALUB]    = vs2_addr;
     op_queue_req_addr[StoreOp] = vs1_addr;
+    op_queue_req_vs[ALUA]      = op_req_i.vs1;
+    op_queue_req_vs[ALUB]      = op_req_i.vs2;
+    op_queue_req_vs[StoreOp]   = op_req_i.vs1;
   end
 
 
@@ -59,42 +71,71 @@ module vrf_accesser
   bank_id_t [NrOpQueue+NrWriteBackVFU-1:0] bank_sel;
 
   for (genvar op_type = 0; op_type < NrOpQueue; op_type++) begin : gen_req
-    lane_vlen_t remain_vl_q, remain_vl_d;
-    vrf_addr_t vrf_req_addr_q, vrf_req_addr_d;
-    logic queue_is_idle, new_req;
-
-    assign queue_is_idle           = remain_vl_q == {$bits(lane_vlen_t) {1'b0}};
-    assign new_req                 = req_ready_o && op_queue_req[op_type];
-    assign op_queue_ready[op_type] = queue_is_idle;
+    state_e state_d, state_q;
+    lane_vlen_t remain_vl_q, remain_vl_d;  // remained bytes
+    vreg_t req_vs_d, req_vs_q;  // base register
+    vrf_addr_t vrf_req_addr_q, vrf_req_addr_d;  // start address
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
-        // don't need to reset `vrf_req_addr_q`
-        remain_vl_q <= 0;
+        // don't need to reset `vrf_req_addr_q`, `remain_vl_q`, `req_vs_q`
+        state_q <= IDLE;
       end else begin
         remain_vl_q    <= remain_vl_d;
         vrf_req_addr_q <= vrf_req_addr_d;
+        state_q        <= state_d;
+        req_vs_q       <= req_vs_d;
       end
     end
 
     always_comb begin
-      remain_vl_d           = new_req ? new_vl : remain_vl_q;
-      vrf_req_addr_d        = new_req ? op_queue_req_addr[op_type] : vrf_req_addr_q;
+      remain_vl_d               = remain_vl_q;
+      req_vs_d                  = req_vs_q;
+      vrf_req_addr_d            = vrf_req_addr_q;
+      state_d                   = state_q;
 
-      vrf_req[op_type]      = !queue_is_idle && op_ready_i[op_type];
-      vrf_wen[op_type]      = 'b0;
-      vrf_req_addr[op_type] = vrf_req_addr_q >> $clog2(NrBank);
-      vrf_wdata[op_type]    = 'b0;
-      vrf_wstrb[op_type]    = 'b0;
-      bank_sel[op_type]     = vrf_req_addr_q[$clog2(NrBank)-1:0];
+      op_access_vs_o[op_type]   = req_vs_q;
+      op_access_done_o[op_type] = 1'b0;
 
-      if (vrf_gnt[op_type]) begin
-        remain_vl_d    = remain_vl_q - VRFWordWidthB[$bits(lane_vlen_t)-1:0];
-        vrf_req_addr_d = vrf_req_addr_q + 1;
-        if (remain_vl_q <= VRFWordWidthB[$bits(lane_vlen_t)-1:0]) begin
-          remain_vl_d = 'b0;
+      // Set these signals zero for reading access
+      vrf_wen[op_type]          = 'b0;
+      vrf_wdata[op_type]        = 'b0;
+      vrf_wstrb[op_type]        = 'b0;
+
+      unique case (state_q)
+        IDLE: begin
+          op_queue_ready[op_type] = 1'b1;
+          if (req_ready_o && op_queue_req[op_type]) begin
+            remain_vl_d    = new_vl;
+            req_vs_d       = op_queue_req_vs[op_type];
+            vrf_req_addr_d = op_queue_req_addr[op_type];
+            state_d        = WORKING;
+          end
         end
-      end
+        WORKING: begin
+          vrf_req[op_type]      = op_ready_i[op_type];
+          vrf_req_addr[op_type] = vrf_req_addr_q >> $clog2(NrBank);
+          bank_sel[op_type]     = vrf_req_addr_q[$clog2(NrBank)-1:0];
+
+          if (vrf_gnt[op_type]) begin
+            remain_vl_d    = remain_vl_q - VRFWordWidthB[$bits(lane_vlen_t)-1:0];
+            vrf_req_addr_d = vrf_req_addr_q + 1;
+            if (remain_vl_q <= VRFWordWidthB[$bits(lane_vlen_t)-1:0]) begin
+              op_access_done_o[op_type] = 1'b1;
+              op_queue_ready[op_type]   = 1'b1;
+
+              if (op_queue_req[op_type] && req_ready_o) begin
+                remain_vl_d    = new_vl;
+                req_vs_d       = op_queue_req_vs[op_type];
+                vrf_req_addr_d = op_queue_req_addr[op_type];
+                state_d        = WORKING;
+              end else begin
+                state_d = IDLE;
+              end
+            end
+          end
+        end
+      endcase
     end
   end : gen_req
 
@@ -187,7 +228,7 @@ module vrf_accesser
   vrf_data_t [NrBank-1:0] rdata;
   logic [NrOpQueue-1:0] rdata_valid_q;
   // TODO: assert `buffer_ready` should be always true.
-  logic buffer_ready;
+  logic [NrOpQueue-1:0] buffer_ready;
   bank_id_t [NrOpQueue-1:0] bank_sel_q;
 
   for (genvar i = 0; i < NrOpQueue; i++) begin : gen_output_shuffle
@@ -203,7 +244,7 @@ module vrf_accesser
       .testmode_i(1'b0),
       .data_i    (rdata[bank_sel_q[i]]),
       .valid_i   (rdata_valid_q[i]),
-      .ready_o   (buffer_ready),
+      .ready_o   (buffer_ready[i]),
       .data_o    (operand_o[i]),
       .valid_o   (op_valid_o[i]),
       .ready_i   (op_ready_i[i])
@@ -224,15 +265,15 @@ module vrf_accesser
     for (int i = VALU; i < NrWriteBackVFU; i = i + 1) begin
       automatic vfu_e q = vfu_e'(i);
       if (vfu_result_gnt_o[i]) begin
-        $display("[%0d][Lane%0d][VRFWrite] %s: addr:%0x, data:%0x, id:%0x", $time, LaneId, q.name(), vfu_result_addr_i[i],
-                 vfu_result_wdata_i[i], vfu_result_id_i[i]);
+        $display("[%0d][Lane%0d][VRFWrite] %s: addr:%0x, data:%0x, id:%0x", $time, LaneId, q.name(),
+                 vfu_result_addr_i[i], vfu_result_wdata_i[i], vfu_result_id_i[i]);
       end
     end
     for (int i = ALUA; i < NrOpQueue; i = i + 1) begin
       automatic op_queue_e q = op_queue_e'(i);
       if (rdata_valid_q[i]) begin
-        $display("[%0d][Lane%0d][VRFRead] %s: addr:%0x, data:%0x", $time, LaneId, q.name(), (vrf_req_addr[i] << $clog2(NrBank)
-                 ) + bank_sel[i] - 1, rdata[bank_sel_q[i]]);
+        $display("[%0d][Lane%0d][VRFRead] %s: addr:%0x, data:%0x", $time, LaneId, q.name(), (vrf_req_addr[i] << $clog2
+                 (NrBank)) + bank_sel[i] - 1, rdata[bank_sel_q[i]]);
       end
     end
   end

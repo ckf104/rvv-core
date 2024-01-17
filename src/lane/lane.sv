@@ -17,9 +17,13 @@ module lane
   output logic                      vfu_req_ready_o,
   input  vfu_req_t                  vfu_req_i,
   input  vfu_e                      target_vfu_i,
-  // Interface between `vfus` and `vinsn_launcher`
+  // done signals from vfus and `vrf_accessser`
   output logic      [NrLaneVFU-1:0] vfus_done_o,
   output insn_id_t  [NrLaneVFU-1:0] vfus_done_id_o,
+  output logic      [NrLaneVFU-1:0] vfus_use_vd_o,
+  output vreg_t     [NrLaneVFU-1:0] vfus_vd_o,
+  output logic      [NrOpQueue-1:0] op_access_done_o,
+  output vreg_t     [NrOpQueue-1:0] op_access_vs_o,
   // Output store operand
   input  logic                      store_op_ready_i,
   output logic                      store_op_valid_o,
@@ -74,7 +78,10 @@ module lane
     // output operands
     .op_ready_i        (op_ready),
     .op_valid_o        (op_valid),
-    .operand_o         (operand)
+    .operand_o         (operand),
+    // vrf data access done
+    .op_access_done_o  (op_access_done_o),
+    .op_access_vs_o    (op_access_vs_o)
   );
 
   /*logic [NrVFU-1:0][InsnIDNum-1:0] vfus_done;
@@ -103,6 +110,8 @@ module lane
     // interface with `vinsn_launcher`
     .alu_done_o        (vfus_done_o[VALU]),
     .alu_done_id_o     (vfus_done_id_o[VALU]),
+    .alu_use_vd_o      (vfus_use_vd_o[VALU]),
+    .alu_vd_o          (vfus_vd_o[VALU]),
     // interface with `vrf_accesser`
     .op_valid_i        (op_valid[ALUB:ALUA]),
     .op_ready_o        (op_ready[ALUB:ALUA]),

@@ -67,10 +67,11 @@ module vinsn_decoder
       issue_req_d.insn_id = insn_id_i;
       unique case (varith_insn.opcode)
         OpcodeVec: begin
-          issue_req_d.vs1 = varith_insn.vs1;
-          issue_req_d.vs2 = varith_insn.vs2;
-          issue_req_d.vd  = varith_insn.vd;
-          issue_req_d.vlB = vec_context_i.vle << vec_context_i.vtype.vsew;
+          issue_req_d.vs1    = varith_insn.vs1;
+          issue_req_d.vs2    = varith_insn.vs2;
+          issue_req_d.vd     = varith_insn.vd;
+          issue_req_d.use_vd = 1'b1;
+          issue_req_d.vlB    = vec_context_i.vle << vec_context_i.vtype.vsew;
           if (varith_insn.vm == Masked) illegal_insn = 1'b1;
           unique case (varith_insn.func3)
             OPIVV: begin
@@ -124,6 +125,7 @@ module vinsn_decoder
           issue_req_d.vop    = VSE;
           issue_req_d.vlB    = vec_context_i.vle << store_vew;
           issue_req_d.vew    = store_vew;
+          issue_req_d.use_vd = 1'b0;
         end
         OpcodeLoadFP: begin
           // verilog_format: off
@@ -140,6 +142,7 @@ module vinsn_decoder
           issue_req_d.vop    = VLE;
           issue_req_d.vlB    = vec_context_i.vle << load_vew;
           issue_req_d.vew    = load_vew;
+          issue_req_d.use_vd = 1'b1;
         end
         default: illegal_insn = 1'b1;
       endcase
