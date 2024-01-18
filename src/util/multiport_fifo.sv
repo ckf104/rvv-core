@@ -14,7 +14,8 @@ module multiport_fifo #(
   parameter int unsigned Depth = 8,  // depth can be arbitrary from 0 to 2**32
   parameter type dtype = logic [DataWidth-1:0],
   // DO NOT OVERWRITE THIS PARAMETER
-  parameter int unsigned AddrDepth = core_pkg::GetWidth(Depth)  // address width
+  parameter int unsigned AddrDepth = core_pkg::GetWidth(Depth),  // address width
+  parameter type cnt_t = logic [AddrDepth:0]
 ) (
   input  logic                  clk_i,    // Clock
   input  logic                  rst_ni,   // Asynchronous reset active low
@@ -22,6 +23,7 @@ module multiport_fifo #(
   // status flags
   output logic                  full_o,   // queue is full
   output logic [NrReadPort-1:0] empty_o,  // queue is empty
+  output cnt_t [NrReadPort-1:0] usage_o,  // fill pointer
   // as long as the queue is not full we can push new data
   input  dtype                  data_i,   // data to push into the queue
   input  logic                  push_i,   // data is valid and can be pushed to the queue
@@ -30,10 +32,7 @@ module multiport_fifo #(
   input  logic [NrReadPort-1:0] pop_i     // forward the read pointer
 );
   typedef logic [AddrDepth-1:0] addr_t;
-  typedef logic [AddrDepth:0] cnt_t;
 
-  // clock gating control
-  logic gate_clock;
   // pointer to the read and write section of the queue
   addr_t [NrReadPort-1:0] read_pointer_n, read_pointer_q;
   addr_t write_pointer_n, write_pointer_q;
@@ -48,6 +47,7 @@ module multiport_fifo #(
   for (genvar i = 0; i < NrReadPort; ++i) begin : gen_output_signal
     assign empty_o[i] = (status_cnt_q[i] == 0);
     assign data_o[i]  = mem_q[read_pointer_q[i]];
+    assign usage_o[i] = status_cnt_q[i];
   end
   // status flags
 
@@ -58,14 +58,11 @@ module multiport_fifo #(
     write_pointer_n = write_pointer_q;
     status_cnt_n    = status_cnt_q;
     mem_n           = mem_q;
-    gate_clock      = 1'b1;
 
     // push a new element to the queue
     if (push_i && ~full_o) begin
       // push the data onto the queue
       mem_n[write_pointer_q] = data_i;
-      // un-gate the clock, we want to write something
-      gate_clock             = 1'b0;
       // increment the write counter
       // this is dead code when Depth is a power of two
       if (write_pointer_q == Depth[AddrDepth-1:0] - 1) write_pointer_n = '0;
@@ -111,7 +108,7 @@ module multiport_fifo #(
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (~rst_ni) begin
       mem_q <= '0;
-    end else if (!gate_clock) begin
+    end else begin
       mem_q <= mem_n;
     end
   end

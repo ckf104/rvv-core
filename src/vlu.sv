@@ -56,8 +56,9 @@ module vlu
       op_cnt_d = op_cnt_q + 1;
       if (op_cnt_q == NrLaneMinusOne[GetWidth(NrLane)-1:0]) op_cnt_d = 'b0;
     end
-    // TODO: here we don't assumed that scalar cpu will round vl up to ByteBlock
-    if (vfu_req_valid_i && vfu_req_ready_o) op_cnt_d = 'b0;
+    // TODO: we can't reset op_cnt_q when new vfu_req is accepted,
+    // because operand may be sent before that.
+    // if (vfu_req_valid_i && vfu_req_ready_o) op_cnt_d = 'b0;
   end : sel_comb
 
   // We can't assume all store operands will arrive in vsu at the same time,

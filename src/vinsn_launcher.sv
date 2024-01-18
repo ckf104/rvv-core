@@ -105,9 +105,8 @@ module vinsn_launcher
     if (op_req_valid_o && op_req_ready_i) op_req_mask_d = 1'b0;
 
     // `issue_req_i.flip_bit != last_flip_bit_q` indicates a new instruction's
-    // coming, and granting of last instruction implicitly. So we can refresh
-    // mask safely.
-    if (issue_req_valid_i && issue_req_i.flip_bit != last_flip_bit_q) begin
+    // coming and zeroed mask shows `req` has been accepted by `vfu` and `opqueue`.
+    if (vfu_req_mask_d == 'b0 && op_req_mask_d == 'b0 && issue_req_i.flip_bit != last_flip_bit_q) begin
       vfu_req_mask_d  = 1'b1;
       op_req_mask_d   = 1'b1;
       last_flip_bit_d = issue_req_i.flip_bit;
@@ -136,7 +135,9 @@ module vinsn_launcher
     target_vfu      = GetVFUByVOp(issue_req_i.vop);
     target_vfu_d    = target_vfu_q;
 
-    if (vfu_req_ready_i[target_vfu] || !vfu_req_valid_q) begin
+    // It's sate to rewrite `vfu_req_q` if `vfu_req_ready_i[target_vfu_q]`
+    // is asserted, instead of `vfu_req_ready_i[target_vfu]`
+    if (vfu_req_ready_i[target_vfu_q] || !vfu_req_valid_q) begin
       vfu_req_valid_d     = issue_req_valid_i & vfu_req_mask_d & ~stall;
 
       vfu_req_d.vop       = issue_req_i.vop;
