@@ -7,7 +7,7 @@ localparam int unsigned NumStimulus = 2;
 
 // vmv.v.i v2, 1
 // vse64.v v2,(ra)
-`define CASE1 \
+`define TEST_CASE \
     vle   = 'd8; \
     vtype = vtype_t'{vsew   : EW64, \
     vlmul  : LMUL_1, default: 'b0}; \
@@ -30,7 +30,7 @@ localparam int unsigned NumStimulus = 4;
 // vmv.v.i v3, 2
 // vadd.vv v1, v2, v3
 // vse64.v v1,(ra)
-`define CASE2 \
+`define TEST_CASE \
     vle   = 'd8; \
     vtype = vtype_t'{vsew   : EW64, \
     vlmul  : LMUL_1, default: 'b0}; \
@@ -63,7 +63,7 @@ localparam int unsigned NumStimulus = 4;
 // vle64.v v3, (x2)
 // vadd.vv v1, v2, v3
 // vse64.v v1,(ra)
-`define CASE3 \
+`define TEST_CASE \
     vle   = 'd8; \
     vtype = vtype_t'{vsew   : EW64, \
     vlmul  : LMUL_1, default: 'b0}; \
@@ -96,7 +96,7 @@ localparam int unsigned NumStimulus = 4;
 // vmv.v.i v3, 1
 // vadd.vv v1, v2, v3
 // vse32.v v1,(ra)
-`define CASE4 \
+`define TEST_CASE \
     vle   = 'd16; \
     vtype = vtype_t'{vsew   : EW32, \
     vlmul  : LMUL_1, default: 'b0}; \

@@ -2,7 +2,9 @@
 `include "rvv_pkg.svh"
 `include "core_pkg.svh"
 
+`ifndef MYCASE
 `define GENERATE_CASE4
+`endif
 `include "test_case.svh"
 
 import core_pkg::insn_id_t;
@@ -75,7 +77,7 @@ module stimulus_emitter
   end
 
   initial begin
-    `CASE4
+    `TEST_CASE
   end
 
 endmodule : stimulus_emitter

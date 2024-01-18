@@ -30,6 +30,7 @@ test_top: generate_shuffle_table
 	--top verilator_test_top $(Verilator_inc_args) \
 	$(if $(trace),--trace-structs --trace-fst) \
 	$(if $(DUMP_VRF_ACCESS), -DDUMP_VRF_ACCESS) \
+	$(if $(MYCASE), -DMYCASE -DGENERATE_CASE$(MYCASE)) \
 	$(DEPS_SRC) $(SRC) $(TB_SRC) $(CPP_SRC) 2>&1 | tee log.txt
 	make -C $(BUILD_DIR) -f Vverilator_test_top.mk -j8
 
