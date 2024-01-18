@@ -41,15 +41,12 @@ module vrf_accesser
   vrf_addr_t [NrOpQueue-1:0] op_queue_req_addr;
   vreg_t [NrOpQueue-1:0] op_queue_req_vs;
 
-  lane_vlen_t new_vl;
-
   // TODO: We should generate req_ready_o based on
   // which operand queue is needed in op_req_i.
   assign req_ready_o  = (op_queue_ready & op_req_i.queue_req) == op_req_i.queue_req;
   assign op_queue_req = {NrOpQueue{req_valid_i}} & op_req_i.queue_req;
 
   always_comb begin
-    new_vl                     = op_req_i.vlB >> LogNrLane;
     vs1_addr                   = GetVRFAddr(op_req_i.vs1);
     vs2_addr                   = GetVRFAddr(op_req_i.vs2);
     op_queue_req_addr[ALUA]    = vs1_addr;
@@ -72,16 +69,16 @@ module vrf_accesser
 
   for (genvar op_type = 0; op_type < NrOpQueue; op_type++) begin : gen_req
     state_e state_d, state_q;
-    lane_vlen_t remain_vl_q, remain_vl_d;  // remained bytes
+    acc_cnt_t acc_cnt_q, acc_cnt_d;  // remained bytes
     vreg_t req_vs_d, req_vs_q;  // base register
     vrf_addr_t vrf_req_addr_q, vrf_req_addr_d;  // start address
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
-        // don't need to reset `vrf_req_addr_q`, `remain_vl_q`, `req_vs_q`
+        // don't need to reset `vrf_req_addr_q`, `acc_cnt_q`, `req_vs_q`
         state_q <= IDLE;
       end else begin
-        remain_vl_q    <= remain_vl_d;
+        acc_cnt_q      <= acc_cnt_d;
         vrf_req_addr_q <= vrf_req_addr_d;
         state_q        <= state_d;
         req_vs_q       <= req_vs_d;
@@ -89,7 +86,7 @@ module vrf_accesser
     end
 
     always_comb begin
-      remain_vl_d               = remain_vl_q;
+      acc_cnt_d                 = acc_cnt_q;
       req_vs_d                  = req_vs_q;
       vrf_req_addr_d            = vrf_req_addr_q;
       state_d                   = state_q;
@@ -106,7 +103,7 @@ module vrf_accesser
         IDLE: begin
           op_queue_ready[op_type] = 1'b1;
           if (req_ready_o && op_queue_req[op_type]) begin
-            remain_vl_d    = new_vl;
+            acc_cnt_d      = op_req_i.acc_cnt;
             req_vs_d       = op_queue_req_vs[op_type];
             vrf_req_addr_d = op_queue_req_addr[op_type];
             state_d        = WORKING;
@@ -114,18 +111,20 @@ module vrf_accesser
         end
         WORKING: begin
           vrf_req[op_type]      = op_ready_i[op_type];
+          // verilator lint_off WIDTHTRUNC
           vrf_req_addr[op_type] = vrf_req_addr_q >> $clog2(NrBank);
+          // verilator lint_on WIDTHTRUNC
           bank_sel[op_type]     = vrf_req_addr_q[$clog2(NrBank)-1:0];
 
           if (vrf_gnt[op_type]) begin
-            remain_vl_d    = remain_vl_q - VRFWordWidthB[$bits(lane_vlen_t)-1:0];
+            acc_cnt_d      = acc_cnt_q - 1;
             vrf_req_addr_d = vrf_req_addr_q + 1;
-            if (remain_vl_q <= VRFWordWidthB[$bits(lane_vlen_t)-1:0]) begin
+            if (acc_cnt_q == 'b1) begin
               op_access_done_o[op_type] = 1'b1;
               op_queue_ready[op_type]   = 1'b1;
 
               if (op_queue_req[op_type] && req_ready_o) begin
-                remain_vl_d    = new_vl;
+                acc_cnt_d      = op_req_i.acc_cnt;
                 req_vs_d       = op_queue_req_vs[op_type];
                 vrf_req_addr_d = op_queue_req_addr[op_type];
                 state_d        = WORKING;
@@ -143,7 +142,9 @@ module vrf_accesser
   for (genvar vfu = 0; vfu < NrWriteBackVFU; vfu++) begin : gen_vfu_req
     assign vrf_req[vfu+NrOpQueue]      = vfu_result_valid_i[vfu] && insn_commit_i[vfu_result_id_i[vfu]];
     assign vrf_wen[vfu+NrOpQueue]      = 'b1;
+    // verilator lint_off WIDTHTRUNC
     assign vrf_req_addr[vfu+NrOpQueue] = vfu_result_addr_i[vfu] >> $clog2(NrBank);
+    // verilator lint_on WIDTHTRUNC
     assign vrf_wdata[vfu+NrOpQueue]    = vfu_result_wdata_i[vfu];
     assign vrf_wstrb[vfu+NrOpQueue]    = vfu_result_wstrb_i[vfu];
     assign bank_sel[vfu+NrOpQueue]     = vfu_result_addr_i[vfu][$clog2(NrBank)-1:0];
@@ -206,7 +207,9 @@ module vrf_accesser
       .req_i  (bank_req[i]),
       .gnt_o  (bank_gnt[i]),
       .data_o ({arbit_bank_wdata[i], arbit_bank_wstrb[i], arbit_bank_req_addr[i], arbit_bank_wen[i]}),
+      // verilator lint_off PINCONNECTEMPTY
       .idx_o  (),
+      // verilator lint_on PINCONNECTEMPTY
       .req_o  (arbit_bank_req[i]),
       .gnt_i  (arbit_bank_req[i])
     );

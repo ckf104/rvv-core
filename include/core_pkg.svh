@@ -41,8 +41,10 @@ package core_pkg;
   localparam int unsigned VRFSliceNumWords = RegSliceNumWords * rvv_pkg::NrVReg;
   localparam int unsigned VRFSlicePerBankNumWords = VRFSliceNumWords / NrBank;
 
+  // The total bytes of each lane accessing vrf once are `ByteBlock`
   localparam int unsigned ByteBlock = VRFWordWidthB * NrLane;
   localparam int unsigned ByteBlockWidth = $clog2(ByteBlock);
+  localparam int unsigned AccessCntWidth = VLWidth - ByteBlockWidth;
 
   localparam int unsigned InsnIDWidth  /*verilator public*/ = 3;
   localparam int unsigned InsnIDNum = 1 << InsnIDWidth;
@@ -56,6 +58,8 @@ package core_pkg;
   typedef logic [VLWidth-1:0] vlen_t;
   typedef logic [LaneVLWidth-1:0] lane_vlen_t;
   typedef logic [4:0] vreg_t;
+  typedef logic [$clog2(VRFWordWidthB)-1:0] ele_cnt_t;
+  typedef logic [AccessCntWidth-1:0] acc_cnt_t;
 
   // Element width for vrf storage
   typedef enum logic [2:0] {
@@ -143,7 +147,7 @@ package core_pkg;
     logic [NrOpQueue-1:0] queue_req;
     //rvv_pkg::vew_e vew_vs1;
     //rvv_pkg::vew_e vew_vs2;
-    vlen_t                vlB;
+    acc_cnt_t             acc_cnt;
   } op_req_t;
 
   typedef struct packed {

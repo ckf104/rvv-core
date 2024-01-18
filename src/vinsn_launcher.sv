@@ -152,6 +152,12 @@ module vinsn_launcher
     end
   end : gen_vfu_req
 
+  // We always round vl up to multiple of ByteBlock, which
+  // ensures that workloads of each lane are the same. But
+  // vfu will receive real vl to generate appropriate mask
+  logic need_round;
+  assign need_round = issue_req_i.vlB[ByteBlockWidth-1:0] != 'b0;
+
   always_comb begin : gen_op_req
     op_req_valid_d = op_req_valid_q;
     op_req_d       = op_req_q;
@@ -162,7 +168,9 @@ module vinsn_launcher
       op_req_d.vs1       = issue_req_i.vs1;
       op_req_d.vs2       = issue_req_i.vs2;
       op_req_d.queue_req = GetOpQueue(issue_req_i.vop, issue_req_i.use_vs);
-      op_req_d.vlB       = issue_req_i.vlB;
+      // verilator lint_off WIDTHEXPAND
+      op_req_d.acc_cnt   = issue_req_i.vlB[$bits(vlen_t)-1:ByteBlockWidth] + need_round;
+      // verilator lint_on WIDTHEXPAND
     end
   end : gen_op_req
 
