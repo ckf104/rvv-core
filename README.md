@@ -31,7 +31,7 @@
 
 * 如何处理读写冒险，以及实现 chaining?
   * 首先约定这里关于 chaining 的目标，我们只希望实现 RAW chaining。因为 WAW 与 WAR 冒险可以通过增加物理寄存器，进行重命名来避免，因此它们对应的 chaining 暂时不考虑。
-  * 关于 scalar cpu 中冒险处理的 scoreboard 的实现可以参考 https://zhuanlan.zhihu.com/p/496078836，概括来看，我们认为经典 scoreboard 的实现为
+  * 关于 scalar cpu 中冒险处理的 scoreboard 的实现可以参考 [记分牌ScoreBoard](https://zhuanlan.zhihu.com/p/496078836)，概括来看，我们认为经典 scoreboard 的实现为
     * 每个寄存器使用 1 bit 来标记该寄存器是否会被某条已发射的指令写。
     * 如果待发射的指令需要读取的寄存器对应的 1 bit 被拉高，则 stall，规避 RAW 冒险。
     * 如果待发射的指令需要写回的寄存器对应的 1 bit 被拉高，则 stall，规避 WAW 冒险。
