@@ -30,6 +30,17 @@ module vlu
   output logic                   insn_use_vd_o,
   output vreg_t                  insn_vd_o
 );
+  // TODO: refactor this to support vstart
+  typedef struct packed {
+    rvv_pkg::vew_e vew_vd;
+    vlen_t         vlB;
+    // vlen_t         vstart;
+    // logic [2:0]    use_vs;
+    // vrf_data_t     scalar_op;
+    insn_id_t      insn_id;
+    vreg_t         vd;
+  } vlu_cmd_t;
+
   // logic [NrLane-1:0] op_in_buf_empty, op_in_buf_full;
   logic [NrLane-1:0] load_op_valid, load_op_gnt;
   vrf_data_t [NrLane-1:0] load_op, shuffled_load_op;
@@ -38,7 +49,7 @@ module vlu
 
   logic [GetWidth(NrLane)-1:0] op_cnt_q, op_cnt_d;
   logic [NrLane-1:0] load_op_valid_demlx, load_op_ready_demlx;
-  vfu_req_t vfu_req_q, vfu_req_d;
+  vlu_cmd_t cmd_q, cmd_d;
 
   stream_demux #(
     .N_OUP(NrLane)
@@ -85,10 +96,10 @@ module vlu
   mem_shuffler_v1 mem_shuffler (
     // Input data
     .data_i   (load_op),
-    .bytes_cnt(vfu_req_q.vlB),
+    .bytes_cnt(cmd_q.vlB),
     // Select one vrf word
 
-    .sew   (vfu_req_q.vew),
+    .sew   (cmd_q.vew_vd),
     // Output data
     .data_o(shuffled_load_op),
     .mask_o(mask)
@@ -107,7 +118,7 @@ module vlu
     assign load_op_strb_o[i]  = payload_out[i].mask;
 
     assign load_op_addr_o[i]  = load_op_addr_q;
-    assign load_id_o[i]       = vfu_req_q.insn_id;
+    assign load_id_o[i]       = cmd_q.insn_id;
   end
 
   logic outbuf_full, push, pop;
@@ -156,11 +167,11 @@ module vlu
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      // Don't need to reset `vfu_req_q`, `load_op_addr_q`
+      // Don't need to reset `cmd_q`, `load_op_addr_q`
       op_cnt_q <= 'b0;
       state_q  <= IDLE;
     end else begin
-      vfu_req_q      <= vfu_req_d;
+      cmd_q          <= cmd_d;
       op_cnt_q       <= op_cnt_d;
       state_q        <= state_d;
       load_op_addr_q <= load_op_addr_d;
@@ -169,40 +180,47 @@ module vlu
 
   always_comb begin : compute_addr
     load_op_addr_d = load_op_addr_q;
-    if (vfu_req_valid_i && vfu_req_ready_o) load_op_addr_d = vfu_req_d.waddr;
+    if (vfu_req_valid_i && vfu_req_ready_o) load_op_addr_d = GetVRFAddr(vfu_req_i.vd);
     else if (pop) load_op_addr_d = load_op_addr_q + 1;
   end : compute_addr
 
   always_comb begin : main_comb
     state_d         = state_q;
-    vfu_req_d       = vfu_req_q;
+    cmd_d           = cmd_q;
 
     vfu_req_ready_o = 1'b0;
     done_o          = 1'b0;
-    done_insn_id_o  = vfu_req_q.insn_id;
+    done_insn_id_o  = cmd_q.insn_id;
     insn_use_vd_o   = 1'b1;
-    insn_vd_o       = vfu_req_q.vd;
+    insn_vd_o       = cmd_q.vd;
 
     unique case (state_q)
       IDLE: begin
         vfu_req_ready_o = 1'b1;
         if (vfu_req_valid_i && target_vfu_i == VLU) begin
-          vfu_req_d = vfu_req_i;
-          state_d   = LOAD;
+          cmd_d.vew_vd  = vfu_req_i.vew_vd;
+          cmd_d.vlB     = vfu_req_i.vl << vfu_req_i.vew_vd;
+          cmd_d.insn_id = vfu_req_i.insn_id;
+          cmd_d.vd      = vfu_req_i.vd;
+          state_d       = LOAD;
         end
       end
       LOAD: begin
         if (pop) begin
-          vfu_req_d.vlB = vfu_req_q.vlB - ByteBlock[$bits(vlen_t)-1:0];
-          if (vfu_req_q.vlB <= ByteBlock[$bits(vlen_t)-1:0]) begin
-            // vfu_req_d.vlB = 'b0;
+          cmd_d.vlB = cmd_q.vlB - ByteBlock[$bits(vlen_t)-1:0];
+          if (cmd_q.vlB <= ByteBlock[$bits(vlen_t)-1:0]) begin
+            // cmd_d.vlB = 'b0;
             done_o          = 1'b1;
 
             // Received `vfu_req_valid_i` depends on `vfu_req_ready_o`, therefore we
             // can't set `vfu_req_ready_o` according to `vfu_req_valid_i`.
             vfu_req_ready_o = 1'b1;
-            if (vfu_req_valid_i && target_vfu_i == VLU) vfu_req_d = vfu_req_i;
-            else state_d = IDLE;
+            if (vfu_req_valid_i && target_vfu_i == VLU) begin
+              cmd_d.vew_vd  = vfu_req_i.vew_vd;
+              cmd_d.vlB     = vfu_req_i.vl << vfu_req_i.vew_vd;
+              cmd_d.insn_id = vfu_req_i.insn_id;
+              cmd_d.vd      = vfu_req_i.vd;
+            end else state_d = IDLE;
           end
         end
       end

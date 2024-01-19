@@ -28,6 +28,16 @@ module vsu
   output logic                   insn_use_vd_o,
   output vreg_t                  insn_vd_o
 );
+  typedef struct packed {
+    rvv_pkg::vew_e vew;
+    vlen_t         vlB;
+    // vlen_t         vstart;
+    // logic [2:0]    use_vs;
+    // vrf_data_t     scalar_op;
+    insn_id_t      insn_id;
+    // vreg_t         vd;
+  } vsu_cmd_t;
+
   logic [NrLane-1:0] op_in_buf_empty, op_in_buf_full;
   logic [NrLane-1:0] store_op_valid, store_op_gnt;
   vrf_data_t [NrLane-1:0] store_op, shuffled_store_op;
@@ -62,15 +72,15 @@ module vsu
   end
 
   logic [GetWidth(NrLane)-1:0] op_cnt_q, op_cnt_d;
-  vfu_req_t vfu_req_q, vfu_req_d;
+  vsu_cmd_t cmd_q, cmd_d;
 
   mem_deshuffler_v1 mem_deshuffler (
     // Input data
     .data_i   (store_op),
-    .bytes_cnt(vfu_req_q.vlB),
+    .bytes_cnt(cmd_q.vlB),
     // Select one vrf word
 
-    .sew   (vfu_req_q.vew),
+    .sew   (cmd_q.vew),
     // Output data
     .data_o(shuffled_store_op),
     // verilator lint_off PINCONNECTEMPTY
@@ -86,14 +96,14 @@ module vsu
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      // don't need to reset `vfu_req_q`
+      // don't need to reset `cmd_q`
       op_cnt_q <= 'b0;
       state_q  <= IDLE;
       // mask_q   <= 'b0;
     end else begin
-      vfu_req_q <= vfu_req_d;
-      op_cnt_q  <= op_cnt_d;
-      state_q   <= state_d;
+      cmd_q    <= cmd_d;
+      op_cnt_q <= op_cnt_d;
+      state_q  <= state_d;
       // mask_q    <= mask_d;
     end
   end
@@ -101,12 +111,12 @@ module vsu
   always_comb begin
     state_d          = state_q;
     op_cnt_d         = op_cnt_q;
-    vfu_req_d        = vfu_req_q;
+    cmd_d            = cmd_q;
 
     vfu_req_ready_o  = 1'b0;
     store_op_valid_o = 1'b0;
     done_o           = 1'b0;
-    done_insn_id_o   = vfu_req_q.insn_id;
+    done_insn_id_o   = cmd_q.insn_id;
     insn_use_vd_o    = 1'b0;  // Store instruction don't write back
     insn_vd_o        = 'b0;
     store_op_gnt     = 'b0;
@@ -118,8 +128,10 @@ module vsu
       IDLE: begin
         vfu_req_ready_o = 1'b1;
         if (vfu_req_valid_i && target_vfu_i == VSU) begin
-          vfu_req_d = vfu_req_i;
-          state_d   = STORE;
+          cmd_d.vew     = vfu_req_i.vew_vd;
+          cmd_d.vlB     = vfu_req_i.vl << vfu_req_i.vew_vd;
+          cmd_d.insn_id = vfu_req_i.insn_id;
+          state_d       = STORE;
         end
       end
       STORE: begin
@@ -132,9 +144,9 @@ module vsu
             store_op_gnt = {NrLane{1'b1}};
             op_cnt_d     = 'b0;
           end
-          vfu_req_d.vlB = vfu_req_q.vlB - VRFWordWidthB[$bits(vlen_t)-1:0];
-          if (vfu_req_q.vlB <= VRFWordWidthB[$bits(vlen_t)-1:0]) begin
-            // vfu_req_d.vlB = 'b0;
+          cmd_d.vlB = cmd_q.vlB - VRFWordWidthB[$bits(vlen_t)-1:0];
+          if (cmd_q.vlB <= VRFWordWidthB[$bits(vlen_t)-1:0]) begin
+            // cmd_d.vlB = 'b0;
             // reset operand selection signal
             // op_cnt_d = 'b0;
             // for (int unsigned i = 0; i < NrLane; ++i) store_op_gnt[i] = |mask_d[i];
@@ -144,8 +156,11 @@ module vsu
             // Received `vfu_req_valid_i` depends on `vfu_req_ready_o`, therefore we
             // can't set `vfu_req_ready_o` according to `vfu_req_valid_i`.
             vfu_req_ready_o = 1'b1;
-            if (vfu_req_valid_i && target_vfu_i == VSU) vfu_req_d = vfu_req_i;
-            else state_d = IDLE;
+            if (vfu_req_valid_i && target_vfu_i == VSU) begin
+              cmd_d.vew     = vfu_req_i.vew_vd;
+              cmd_d.vlB     = vfu_req_i.vl << vfu_req_i.vew_vd;
+              cmd_d.insn_id = vfu_req_i.insn_id;
+            end else state_d = IDLE;
           end
         end
       end

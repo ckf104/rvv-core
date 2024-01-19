@@ -58,7 +58,10 @@ package core_pkg;
   typedef logic [VLWidth-1:0] vlen_t;
   typedef logic [LaneVLWidth-1:0] lane_vlen_t;
   typedef logic [4:0] vreg_t;
-  typedef logic [$clog2(VRFWordWidthB)-1:0] ele_cnt_t;
+  // The main purpose of introducing `ele_cnt_t` is to count skipped leading bytes
+  // and trailing bytes caused by non-aligned vstart or vl. It's possible the whole
+  // vrf word is skipped. Therefore the width of `ele_cnt_t` is `clog2(VRFWordWidthB) + 1`.
+  typedef logic [$clog2(VRFWordWidthB):0] ele_cnt_t;
   typedef logic [AccessCntWidth-1:0] acc_cnt_t;
 
   // Element width for vrf storage
@@ -121,41 +124,44 @@ package core_pkg;
   } wb_vfu_e;
 
   typedef struct packed {
-    vlen_t           vle;
+    vlen_t           vl;
     vlen_t           vstart;
     rvv_pkg::vtype_t vtype;
   } vec_context_t  /*verilator public*/;
 
+  localparam logic [1:0] VS1 = 2'b00;
+  localparam logic [1:0] VS2 = 2'b01;
+  localparam logic [1:0] VS3 = 2'b10;
+  localparam logic [1:0] VD = 2'b10;
+
   typedef struct packed {
-    vreg_t         vs1;
-    vreg_t         vs2;
-    vreg_t         vd;
-    vop_e          vop;
-    vlen_t         vlB;
-    rvv_pkg::vew_e vew;
-    logic [1:0]    use_vs;     // whether this instruction will read vs1, vs2 register
-    logic          use_vd;     // whether this instruction will write vd register
-    vrf_data_t     scalar_op;
-    insn_id_t      insn_id;
-    // indicate a new req;
-    logic          flip_bit;
+    vreg_t [2:0]         vs;
+    logic [2:0]          use_vs;
+    rvv_pkg::vew_e [2:0] vew;
+    vop_e                vop;
+    vlen_t               vl;
+    vlen_t               vstart;
+    vrf_data_t           scalar_op;
+    insn_id_t            insn_id;
   } issue_req_t;
 
   typedef struct packed {
-    vreg_t                vs1;
-    vreg_t                vs2;
+    vreg_t [2:0]          vs;
+    rvv_pkg::vew_e [2:0]  vew;
     logic [NrOpQueue-1:0] queue_req;
-    //rvv_pkg::vew_e vew_vs1;
-    //rvv_pkg::vew_e vew_vs2;
-    acc_cnt_t             acc_cnt;
+    vlen_t                vl;
+    vlen_t                vstart;
+`ifdef DUMP_VRF_ACCESS
+    insn_id_t             insn_id;
+`endif
   } op_req_t;
 
   typedef struct packed {
     vop_e          vop;
-    rvv_pkg::vew_e vew;
-    vlen_t         vlB;
-    logic [1:0]    use_vs;
-    vrf_addr_t     waddr;
+    rvv_pkg::vew_e vew_vd;
+    vlen_t         vl;
+    vlen_t         vstart;
+    logic [2:0]    use_vs;
     vrf_data_t     scalar_op;
     insn_id_t      insn_id;
     vreg_t         vd;
@@ -184,9 +190,9 @@ package core_pkg;
       //default: return VALU;
     endcase
   endfunction
-  function automatic logic [NrOpQueue-1:0] GetOpQueue(vop_e vop, logic [1:0] use_vs);
+  function automatic logic [NrOpQueue-1:0] GetOpQueue(vop_e vop, logic [2:0] use_vs);
     unique case (vop)
-      VADD, VSUB, VSLL, VSRL, VSRA, VMERGE: return {{NrOpQueue - 2{1'b0}}, 2'b11 & use_vs};
+      VADD, VSUB, VSLL, VSRL, VSRA, VMERGE: return {{NrOpQueue - 2{1'b0}}, 2'b11 & use_vs[VS2:VS1]};
       VSE: return {{NrOpQueue - 1{1'b0}}, 1'b1} << 2;
       VLE: return {NrOpQueue{1'b0}};
     endcase

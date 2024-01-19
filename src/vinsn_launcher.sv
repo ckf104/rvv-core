@@ -39,36 +39,58 @@ module vinsn_launcher
   input  insn_id_t                   insn_can_commit_id_i,
   output logic       [InsnIDNum-1:0] insn_can_commit_o
 );
+  issue_req_t issue_req_d, issue_req_q;
+  logic issue_req_valid_d, issue_req_valid_q;
+
   // `vinsn_launcher` will send `vfu_req` to `valu_wrapper` and
   // `op_req` to `vrf_accesser`, use a mask to ensure that both
   // req are sent once and only once.
   logic vfu_req_mask_q, vfu_req_mask_d;
-  vfu_req_t vfu_req_q, vfu_req_d;
-  vfu_e target_vfu_q, target_vfu_d, target_vfu;
-  logic vfu_req_valid_q, vfu_req_valid_d;
-
   logic op_req_mask_q, op_req_mask_d;
-  op_req_t op_req_q, op_req_d;
-  logic op_req_valid_q, op_req_valid_d;
 
-  logic last_flip_bit_q, last_flip_bit_d;
+  always_comb begin : issue_req_logic
+    issue_req_d       = issue_req_q;
+    issue_req_valid_d = issue_req_valid_q;
+    issue_req_ready_o = 1'b0;
+    if (((vfu_req_ready_i[target_vfu_o] && vfu_req_valid_o) || !vfu_req_mask_q) &&
+        ((op_req_ready_i && op_req_valid_o) || !op_req_mask_q)) begin
+      issue_req_d       = issue_req_i;
+      issue_req_valid_d = issue_req_valid_i;
+      issue_req_ready_o = 1'b1;
+    end
+  end
 
-  assign vfu_req_valid_o = vfu_req_valid_q;
-  assign vfu_req_o       = vfu_req_q;
-  assign op_req_valid_o  = op_req_valid_q;
-  assign op_req_o        = op_req_q;
-  assign target_vfu_o    = target_vfu_q;
+  always_comb begin : mask_logic
+    vfu_req_mask_d = vfu_req_mask_q;
+    op_req_mask_d  = op_req_mask_q;
+
+    if (vfu_req_valid_o && vfu_req_ready_i[target_vfu_o]) vfu_req_mask_d = 1'b0;
+    if (op_req_valid_o && op_req_ready_i) op_req_mask_d = 1'b0;
+    if (issue_req_ready_o && issue_req_valid_i) begin
+      vfu_req_mask_d = 1'b1;
+      op_req_mask_d  = 1'b1;
+    end
+  end
+  // A single cycle pulse to show that a new instruction is issued.
+  logic issue_new_insn;
+  assign issue_new_insn = issue_req_ready_o && (op_req_mask_q || vfu_req_mask_q);
 
   always_ff @(posedge clk_i or negedge rst_ni) begin
     if (!rst_ni) begin
-      vfu_req_mask_q  <= 1'b0;
-      op_req_mask_q   <= 1'b0;
-      // Opposite initial value compared with `flip_bit_q` in `vinsn_decoder`
-      last_flip_bit_q <= 1'b1;
+      issue_req_valid_q <= 'b0;
     end else begin
-      vfu_req_mask_q  <= vfu_req_mask_d;
-      op_req_mask_q   <= op_req_mask_d;
-      last_flip_bit_q <= last_flip_bit_d;
+      issue_req_q       <= issue_req_d;
+      issue_req_valid_q <= issue_req_valid_d;
+    end
+  end
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      vfu_req_mask_q <= 1'b0;
+      op_req_mask_q  <= 1'b0;
+    end else begin
+      vfu_req_mask_q <= vfu_req_mask_d;
+      op_req_mask_q  <= op_req_mask_d;
     end
   end
 
@@ -77,8 +99,8 @@ module vinsn_launcher
   scoreboard scoreboard (
     .clk_i           (clk_i),
     .rst_ni          (rst_ni),
-    .issue_req_i     (issue_req_i),
-    .issue_req_gnt_i (issue_req_ready_o && issue_req_valid_i),
+    .issue_req_i     (issue_req_q),
+    .is_issued_i     (issue_new_insn),
     .op_access_done_i(op_access_done_i),
     .op_access_vs_i  (op_access_vs_i),
     .insn_done_i     (vfu_done_i),
@@ -88,90 +110,39 @@ module vinsn_launcher
     .stall           (stall)
   );
 
-  always_comb begin : gen_req_ready
-    issue_req_ready_o = 1'b0;
-    if ((!vfu_req_valid_o || vfu_req_ready_i[target_vfu_o]) && (!op_req_valid_o || op_req_ready_i)) begin
-      issue_req_ready_o = 1'b1;
-    end
-    if (stall) issue_req_ready_o = 1'b0;
-  end
-
-  always_comb begin : req_mask
-    vfu_req_mask_d  = vfu_req_mask_q;
-    op_req_mask_d   = op_req_mask_q;
-    last_flip_bit_d = last_flip_bit_q;
-
-    if (vfu_req_valid_o && vfu_req_ready_i[target_vfu_o]) vfu_req_mask_d = 1'b0;
-    if (op_req_valid_o && op_req_ready_i) op_req_mask_d = 1'b0;
-
-    // `issue_req_i.flip_bit != last_flip_bit_q` indicates a new instruction's
-    // coming and zeroed mask shows `req` has been accepted by `vfu` and `opqueue`.
-    if (vfu_req_mask_d == 'b0 && op_req_mask_d == 'b0 && issue_req_i.flip_bit != last_flip_bit_q) begin
-      vfu_req_mask_d  = 1'b1;
-      op_req_mask_d   = 1'b1;
-      last_flip_bit_d = issue_req_i.flip_bit;
-    end
-
-  end : req_mask
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      // don't need to reset `vfu_req_q` and `op_req_q`, `target_vfu_q`
-      vfu_req_valid_q <= 1'b0;
-      op_req_valid_q  <= 1'b0;
-    end else begin
-      vfu_req_valid_q <= vfu_req_valid_d;
-      op_req_valid_q  <= op_req_valid_d;
-      vfu_req_q       <= vfu_req_d;
-      target_vfu_q    <= target_vfu_d;
-      op_req_q        <= op_req_d;
-    end
-  end
-
   always_comb begin : gen_vfu_req
     // Deassert valid signal once handshake is successful.
-    vfu_req_valid_d = vfu_req_valid_q;
-    vfu_req_d       = vfu_req_q;
-    target_vfu      = GetVFUByVOp(issue_req_i.vop);
-    target_vfu_d    = target_vfu_q;
+    vfu_req_valid_o     = issue_req_valid_q & vfu_req_mask_q & ~stall;
 
-    // It's sate to rewrite `vfu_req_q` if `vfu_req_ready_i[target_vfu_q]`
-    // is asserted, instead of `vfu_req_ready_i[target_vfu]`
-    if (vfu_req_ready_i[target_vfu_q] || !vfu_req_valid_q) begin
-      vfu_req_valid_d     = issue_req_valid_i & vfu_req_mask_d & ~stall;
+    vfu_req_o.vop       = issue_req_q.vop;
+    vfu_req_o.vew_vd    = issue_req_q.vew[VD];
+    vfu_req_o.vl        = issue_req_q.vl;
+    vfu_req_o.use_vs    = issue_req_q.use_vs;
+    vfu_req_o.scalar_op = issue_req_q.scalar_op;
+    vfu_req_o.insn_id   = issue_req_q.insn_id;
+    vfu_req_o.vd        = issue_req_q.vs[VD];
+    vfu_req_o.vstart    = issue_req_q.vstart;
+    target_vfu_o        = GetVFUByVOp(issue_req_q.vop);
 
-      vfu_req_d.vop       = issue_req_i.vop;
-      vfu_req_d.vew       = issue_req_i.vew;
-      vfu_req_d.vlB       = issue_req_i.vlB;
-      vfu_req_d.use_vs    = issue_req_i.use_vs;
-      vfu_req_d.waddr     = GetVRFAddr(issue_req_i.vd);
-      vfu_req_d.scalar_op = issue_req_i.scalar_op;
-      vfu_req_d.insn_id   = issue_req_i.insn_id;
-      vfu_req_d.vd        = issue_req_i.vd;
-      target_vfu_d        = target_vfu;
-    end
   end : gen_vfu_req
 
   // We always round vl up to multiple of ByteBlock, which
   // ensures that workloads of each lane are the same. But
   // vfu will receive real vl to generate appropriate mask
-  logic need_round;
-  assign need_round = issue_req_i.vlB[ByteBlockWidth-1:0] != 'b0;
+  //logic need_round;
+  //assign need_round = issue_req_q.vlB[ByteBlockWidth-1:0] != 'b0;
 
   always_comb begin : gen_op_req
-    op_req_valid_d = op_req_valid_q;
-    op_req_d       = op_req_q;
+    op_req_valid_o     = issue_req_valid_q & op_req_mask_q & ~stall;
 
-    if (op_req_ready_i || !op_req_valid_q) begin
-      op_req_valid_d     = issue_req_valid_i & op_req_mask_d & ~stall;
-
-      op_req_d.vs1       = issue_req_i.vs1;
-      op_req_d.vs2       = issue_req_i.vs2;
-      op_req_d.queue_req = GetOpQueue(issue_req_i.vop, issue_req_i.use_vs);
-      // verilator lint_off WIDTHEXPAND
-      op_req_d.acc_cnt   = issue_req_i.vlB[$bits(vlen_t)-1:ByteBlockWidth] + need_round;
-      // verilator lint_on WIDTHEXPAND
-    end
+    op_req_o.vs        = issue_req_q.vs;
+    op_req_o.vew       = issue_req_q.vew;
+    op_req_o.queue_req = GetOpQueue(issue_req_q.vop, issue_req_q.use_vs);
+    op_req_o.vl        = issue_req_q.vl;
+    op_req_o.vstart    = issue_req_q.vstart;
+`ifdef DUMP_VRF_ACCESS
+    op_req_o.insn_id = issue_req_q.insn_id;
+`endif
   end : gen_op_req
 
   // TODO: fix valid/ready bugs

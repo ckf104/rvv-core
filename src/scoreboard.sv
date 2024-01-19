@@ -10,7 +10,10 @@ module scoreboard
   input  logic                       clk_i,
   input  logic                       rst_ni,
   input  issue_req_t                 issue_req_i,
-  input  logic                       issue_req_gnt_i,
+  // `issue_req_i` indicates that `issue_req_i` has been issued by launcher
+  // successfully. Scoreboard updates `reading_q`, `writing_q` after instruction
+  // has been issued to avoid fake `stall` signal.
+  input  logic                       is_issued_i,
   input  logic       [NrOpQueue-1:0] op_access_done_i,
   input  vreg_t      [NrOpQueue-1:0] op_access_vs_i,
   input  logic       [    NrVFU-1:0] insn_done_i,
@@ -24,7 +27,7 @@ module scoreboard
 
   always_comb begin : comp_running_vinsn
     vinsn_running_d = vinsn_running_q;
-    if (issue_req_gnt_i) vinsn_running_d[issue_req_i.insn_id] = 1'b1;
+    if (is_issued_i) vinsn_running_d[issue_req_i.insn_id] = 1'b1;
     for (int unsigned i = 0; i < NrVFU; ++i) begin
       if (insn_done_i[i]) vinsn_running_d[insn_done_id_i[i]] = 1'b0;
     end
@@ -64,9 +67,9 @@ module scoreboard
         // writing_id_d[insn_vd_i[i]] = issue_req_i.insn_id;
       end
     end
-    if (issue_req_gnt_i) begin
-      if (issue_req_i.use_vd) begin
-        writing_d[issue_req_i.vd] = 1'b1;
+    if (is_issued_i) begin
+      if (issue_req_i.use_vs[VD]) begin
+        writing_d[issue_req_i.vs[VD]] = 1'b1;
         // writing_id_d[issue_req_i.vd] = issue_req_i.insn_id;
       end
     end
@@ -79,12 +82,12 @@ module scoreboard
         reading_d[op_access_vs_i[i]] -= 1;
       end
     end
-    if (issue_req_gnt_i) begin
-      if (issue_req_i.use_vs[0]) begin
-        reading_d[issue_req_i.vs1] += 1;
+    if (is_issued_i) begin
+      if (issue_req_i.use_vs[VS1]) begin
+        reading_d[issue_req_i.vs[VS1]] += 1;
       end
-      if (issue_req_i.use_vs[1]) begin
-        reading_d[issue_req_i.vs2] += 1;
+      if (issue_req_i.use_vs[VS2]) begin
+        reading_d[issue_req_i.vs[VS2]] += 1;
       end
     end
   end : update_reading
@@ -95,10 +98,10 @@ module scoreboard
     // decoder can decode an instruction anyway despite asserted `stall` signal.
     // `writing_d` depends on `issue_req_ready_o`, which depends on `stall`,
     // therefore using `writing_d` here will cause combinational loop.
-    if (issue_req_i.use_vd && writing_q[issue_req_i.vd]) stall = 1'b1;  //WAW
-    else if (issue_req_i.use_vd && |reading_q[issue_req_i.vd]) stall = 1'b1;  // WAR
-    else if (issue_req_i.use_vs[0] && writing_q[issue_req_i.vs1]) stall = 1'b1;  // RAW
-    else if (issue_req_i.use_vs[1] && writing_q[issue_req_i.vs2]) stall = 1'b1;  // RAW
+    if (issue_req_i.use_vs[VD] && writing_q[issue_req_i.vs[VD]]) stall = 1'b1;  //WAW
+    else if (issue_req_i.use_vs[VD] && |reading_q[issue_req_i.vs[VD]]) stall = 1'b1;  // WAR
+    else if (issue_req_i.use_vs[VS1] && writing_q[issue_req_i.vs[VS1]]) stall = 1'b1;  // RAW
+    else if (issue_req_i.use_vs[VS2] && writing_q[issue_req_i.vs[VS2]]) stall = 1'b1;  // RAW
   end : gen_stall
 
 endmodule : scoreboard

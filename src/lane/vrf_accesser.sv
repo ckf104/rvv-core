@@ -34,27 +34,51 @@ module vrf_accesser
     WORKING
   } state_e;
 
+  typedef struct packed {
+    vreg_t     base_vs;  // Register counted by scoreboard
+    vrf_addr_t raddr;
+    acc_cnt_t  acc_cnt;
+  } opqueue_cmd_t;
+
   // part 0: shuffle req into each operand queue
   logic [NrOpQueue-1:0] op_queue_req;
   logic [NrOpQueue-1:0] op_queue_ready;
-  vrf_addr_t vs1_addr, vs2_addr;
-  vrf_addr_t [NrOpQueue-1:0] op_queue_req_addr;
-  vreg_t [NrOpQueue-1:0] op_queue_req_vs;
 
-  // TODO: We should generate req_ready_o based on
-  // which operand queue is needed in op_req_i.
+  // Temporary variable
+  vrf_addr_t [2:0] vs_addr;
+  vlen_t [2:0] vlB, vstartB;
+  acc_cnt_t [2:0] cut_vl, cut_vstart, acc_cnt;
+  logic [2:0] need_round;
+
+  opqueue_cmd_t [NrOpQueue-1:0] opqueue_cmd;
+
   assign req_ready_o  = (op_queue_ready & op_req_i.queue_req) == op_req_i.queue_req;
   assign op_queue_req = {NrOpQueue{req_valid_i}} & op_req_i.queue_req;
 
   always_comb begin
-    vs1_addr                   = GetVRFAddr(op_req_i.vs1);
-    vs2_addr                   = GetVRFAddr(op_req_i.vs2);
-    op_queue_req_addr[ALUA]    = vs1_addr;
-    op_queue_req_addr[ALUB]    = vs2_addr;
-    op_queue_req_addr[StoreOp] = vs1_addr;
-    op_queue_req_vs[ALUA]      = op_req_i.vs1;
-    op_queue_req_vs[ALUB]      = op_req_i.vs2;
-    op_queue_req_vs[StoreOp]   = op_req_i.vs1;
+    // TODO: maybe adjustment of vl and vstart could be moved into `vinsn_launcher`
+    for (int unsigned i = 0; i < 3; ++i) begin
+      vlB[i]        = op_req_i.vl << op_req_i.vew[i];
+      vstartB[i]    = op_req_i.vstart << op_req_i.vew[i];
+      cut_vl[i]     = vlB[i][$bits(vlen_t)-1:ByteBlockWidth];
+      cut_vstart[i] = vstartB[i][$bits(vlen_t)-1:ByteBlockWidth];
+      need_round[i] = vlB[i][ByteBlockWidth-1:0] != 'b0;
+      acc_cnt[i]    = (cut_vl[i] + need_round[i]) - cut_vstart[i];
+      vs_addr[i]    = GetVRFAddr(op_req_i.vs[i]) + cut_vstart[i];
+    end
+
+    // TODO: Change this shuffle into a for-loop
+    opqueue_cmd[ALUA].raddr      = vs_addr[VS1];
+    opqueue_cmd[ALUB].raddr      = vs_addr[VS2];
+    opqueue_cmd[StoreOp].raddr   = vs_addr[VS1];
+
+    opqueue_cmd[ALUA].base_vs    = op_req_i.vs[VS1];
+    opqueue_cmd[ALUB].base_vs    = op_req_i.vs[VS2];
+    opqueue_cmd[StoreOp].base_vs = op_req_i.vs[VS1];
+
+    opqueue_cmd[ALUA].acc_cnt    = acc_cnt[VS1];
+    opqueue_cmd[ALUB].acc_cnt    = acc_cnt[VS2];
+    opqueue_cmd[StoreOp].acc_cnt = acc_cnt[VS1];
   end
 
 
@@ -69,65 +93,59 @@ module vrf_accesser
 
   for (genvar op_type = 0; op_type < NrOpQueue; op_type++) begin : gen_req
     state_e state_d, state_q;
-    acc_cnt_t acc_cnt_q, acc_cnt_d;  // remained bytes
-    vreg_t req_vs_d, req_vs_q;  // base register
-    vrf_addr_t vrf_req_addr_q, vrf_req_addr_d;  // start address
+    opqueue_cmd_t cmd_d, cmd_q;
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
       if (!rst_ni) begin
-        // don't need to reset `vrf_req_addr_q`, `acc_cnt_q`, `req_vs_q`
+        // don't need to reset `cmd_q`
         state_q <= IDLE;
       end else begin
-        acc_cnt_q      <= acc_cnt_d;
-        vrf_req_addr_q <= vrf_req_addr_d;
-        state_q        <= state_d;
-        req_vs_q       <= req_vs_d;
+        cmd_q   <= cmd_d;
+        state_q <= state_d;
       end
     end
 
     always_comb begin
-      acc_cnt_d                 = acc_cnt_q;
-      req_vs_d                  = req_vs_q;
-      vrf_req_addr_d            = vrf_req_addr_q;
+      cmd_d                     = cmd_q;
       state_d                   = state_q;
 
-      op_access_vs_o[op_type]   = req_vs_q;
+      op_access_vs_o[op_type]   = cmd_q.base_vs;
       op_access_done_o[op_type] = 1'b0;
+
+      vrf_req[op_type]          = 1'b0;
+      vrf_req_addr[op_type]     = 'b0;  // default zero
+      bank_sel[op_type]         = 'b0;  // default zero
 
       // Set these signals zero for reading access
       vrf_wen[op_type]          = 'b0;
-      vrf_wdata[op_type]        = 'b0;
-      vrf_wstrb[op_type]        = 'b0;
+      vrf_wdata[op_type]        = 'b0;  // default zero
+      vrf_wstrb[op_type]        = 'b0;  // default zero
 
       unique case (state_q)
         IDLE: begin
           op_queue_ready[op_type] = 1'b1;
           if (req_ready_o && op_queue_req[op_type]) begin
-            acc_cnt_d      = op_req_i.acc_cnt;
-            req_vs_d       = op_queue_req_vs[op_type];
-            vrf_req_addr_d = op_queue_req_addr[op_type];
-            state_d        = WORKING;
+            cmd_d   = opqueue_cmd[op_type];
+            state_d = WORKING;
           end
         end
         WORKING: begin
           vrf_req[op_type]      = op_ready_i[op_type];
           // verilator lint_off WIDTHTRUNC
-          vrf_req_addr[op_type] = vrf_req_addr_q >> $clog2(NrBank);
+          vrf_req_addr[op_type] = cmd_q.raddr >> $clog2(NrBank);
           // verilator lint_on WIDTHTRUNC
-          bank_sel[op_type]     = vrf_req_addr_q[$clog2(NrBank)-1:0];
+          bank_sel[op_type]     = cmd_q.raddr[$clog2(NrBank)-1:0];
 
           if (vrf_gnt[op_type]) begin
-            acc_cnt_d      = acc_cnt_q - 1;
-            vrf_req_addr_d = vrf_req_addr_q + 1;
-            if (acc_cnt_q == 'b1) begin
+            cmd_d.acc_cnt = cmd_q.acc_cnt - 1;
+            cmd_d.raddr   = cmd_q.raddr + 1;
+            if (cmd_q.acc_cnt == 'b1) begin
               op_access_done_o[op_type] = 1'b1;
               op_queue_ready[op_type]   = 1'b1;
 
               if (op_queue_req[op_type] && req_ready_o) begin
-                acc_cnt_d      = op_req_i.acc_cnt;
-                req_vs_d       = op_queue_req_vs[op_type];
-                vrf_req_addr_d = op_queue_req_addr[op_type];
-                state_d        = WORKING;
+                cmd_d   = opqueue_cmd[op_type];
+                state_d = WORKING;
               end else begin
                 state_d = IDLE;
               end
@@ -267,23 +285,29 @@ module vrf_accesser
   // Result of reading from vrf will be output after one cycle.
   // We need to remember the address of reading for dumping.
   bank_addr_t [NrOpQueue-1:0] vrf_req_addr_q;
+  insn_id_t   [NrOpQueue-1:0] vrf_req_id_q;
   always_ff @(posedge clk_i) begin
     vrf_req_addr_q <= vrf_req_addr;
+    for (int unsigned op_type = 0; op_type < NrOpQueue; ++op_type) begin
+      if (req_ready_o && op_queue_req[op_type]) begin
+        vrf_req_id_q[op_type] <= op_req_i.insn_id;
+      end
+    end
   end
 
   always_ff @(posedge clk_i) begin
     for (int i = VALU; i < NrWriteBackVFU; i = i + 1) begin
       automatic vfu_e q = vfu_e'(i);
       if (vfu_result_gnt_o[i]) begin
-        $display("[%0d][Lane%0d][VRFWrite] %s: addr:%0x, data:%0x, id:%0x", $time, LaneId, q.name(),
-                 vfu_result_addr_i[i], vfu_result_wdata_i[i], vfu_result_id_i[i]);
+        $display("[%0d][Lane%0d][VRFWrite] %s: addr:%0x, data:%x, mask:%b, id:%0x", $time, LaneId, q.name(),
+                 vfu_result_addr_i[i], vfu_result_wdata_i[i], vfu_result_wstrb_i[i], vfu_result_id_i[i]);
       end
     end
     for (int i = ALUA; i < NrOpQueue; i = i + 1) begin
       automatic op_queue_e q = op_queue_e'(i);
       if (rdata_valid_q[i]) begin
-        $display("[%0d][Lane%0d][VRFRead] %s: addr:%0x, data:%0x", $time, LaneId, q.name(), (vrf_req_addr_q[i] << $clog2
-                 (NrBank)) + bank_sel_q[i], rdata[bank_sel_q[i]]);
+        $display("[%0d][Lane%0d][VRFRead] %s: addr:%0x, data:%x, id:%0x", $time, LaneId, q.name(), (vrf_req_addr_q[i] << $clog2
+                 (NrBank)) + bank_sel_q[i], rdata[bank_sel_q[i]], vrf_req_id_q[i]);
       end
     end
   end

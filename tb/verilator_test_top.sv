@@ -36,7 +36,7 @@ module stimulus_emitter
   output vrf_data_t           load_op_o
 );
   stimulus [NumStimulus-1:0] stim_array;
-  vlen_t vle;
+  vlen_t vl;
   vtype_t vtype;
 
   logic [$clog2(NumStimulus+1)-1:0] cnt_q, cnt_d, sel;
@@ -61,16 +61,19 @@ module stimulus_emitter
     end
   end : load_value
 
+  // Seperate these signals from `always_comb` to avoid
+  // UNOPTFLAT warning of verilator.
+  assign sel                  = valid_o ? cnt_q : 'b0;
+  assign insn_o               = stim_array[sel].insn;
+  assign insn_id_o            = stim_array[sel].insn_id;
+  assign vec_context_o        = stim_array[sel].vec_context;
+  assign insn_can_commit_o    = 1'b1;
+  assign insn_can_commit_id_o = stim_array[sel].insn_id;
+  assign flush_o              = 1'b0;
+  assign valid_o              = cnt_q < NumStimulus;
+
   always_comb begin
-    cnt_d                = cnt_q;
-    valid_o              = cnt_q < NumStimulus;
-    sel                  = valid_o ? cnt_q : 'b0;
-    insn_o               = stim_array[sel].insn;
-    insn_id_o            = stim_array[sel].insn_id;
-    vec_context_o        = stim_array[sel].vec_context;
-    insn_can_commit_o    = 1'b1;
-    insn_can_commit_id_o = stim_array[sel].insn_id;
-    flush_o              = 1'b0;
+    cnt_d = cnt_q;
     if (valid_o && ready_i) begin
       cnt_d = cnt_q + 1;
     end

@@ -44,8 +44,8 @@ module rvv_core
   assign ready_o = decoder_ready;
 
   vinsn_decoder decoder (
-    .clk_i         (clk_i),
-    .rst_ni        (rst_ni),
+    // .clk_i         (clk_i),
+    // .rst_ni        (rst_ni),
     // Interface with issue logic of scalar core
     .valid_i       (valid_i),
     .ready_o       (decoder_ready),
