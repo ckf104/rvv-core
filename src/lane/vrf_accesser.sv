@@ -264,6 +264,13 @@ module vrf_accesser
   end
 
 `ifdef DUMP_VRF_ACCESS
+  // Result of reading from vrf will be output after one cycle.
+  // We need to remember the address of reading for dumping.
+  bank_addr_t [NrOpQueue-1:0] vrf_req_addr_q;
+  always_ff @(posedge clk_i) begin
+    vrf_req_addr_q <= vrf_req_addr;
+  end
+
   always_ff @(posedge clk_i) begin
     for (int i = VALU; i < NrWriteBackVFU; i = i + 1) begin
       automatic vfu_e q = vfu_e'(i);
@@ -275,8 +282,8 @@ module vrf_accesser
     for (int i = ALUA; i < NrOpQueue; i = i + 1) begin
       automatic op_queue_e q = op_queue_e'(i);
       if (rdata_valid_q[i]) begin
-        $display("[%0d][Lane%0d][VRFRead] %s: addr:%0x, data:%0x", $time, LaneId, q.name(), (vrf_req_addr[i] << $clog2
-                 (NrBank)) + bank_sel[i] - 1, rdata[bank_sel_q[i]]);
+        $display("[%0d][Lane%0d][VRFRead] %s: addr:%0x, data:%0x", $time, LaneId, q.name(), (vrf_req_addr_q[i] << $clog2
+                 (NrBank)) + bank_sel_q[i], rdata[bank_sel_q[i]]);
       end
     end
   end
