@@ -7,6 +7,7 @@ localparam int unsigned NumStimulus = 2;
 
 // vmv.v.i v2, 1  (vl = 18, vstart = 1)
 // vse32.v v2,(ra)
+// result: 0, 1, 1 ... 1, 0, 0
 `define TEST_CASE \
     vl   = 'd8; \
     vtype = vtype_t'{vsew   : EW32, \
@@ -63,6 +64,7 @@ localparam int unsigned NumStimulus = 4;
 // vle64.v v3, (x2)
 // vadd.vv v1, v2, v3
 // vse64.v v1,(ra)
+// 8, a, c, e, 10, 12, 14, 16
 `define TEST_CASE \
     vl   = 'd8; \
     vtype = vtype_t'{vsew   : EW64, \
@@ -162,6 +164,7 @@ localparam int unsigned NumStimulus = 3;
 // vmv.v.i v2, 1 (vl = 20, vstart = 0)
 // vle32.v v2, (ra)  (vl = 18, vstart = 1)
 // vse32.v v2, (ra) (vl = 20, vstart = 0)
+// result: 1, 0, 1, 0, 2, 0, 3, 0 ... 8, 0, 1, 1
 `define TEST_CASE \
     vl   = 'd8; \
     vtype = vtype_t'{vsew   : EW32, \
@@ -180,6 +183,28 @@ localparam int unsigned NumStimulus = 3;
       insn: 32'h0200e127,                                                  \
       insn_id: 'd2,                                                        \
       vec_context: vec_context_t'{vl   : 20, vtype : vtype, vstart: 'd0} \
+    };
+
+`elsif GENERATE_CASE7
+
+localparam int unsigned NumStimulus = 2;
+
+// vmv.v.i v2, 1
+// vse32.v v2,(ra)  (vl = 19, vstart = 1)
+// result: 1, 1, ... 1, 0, 0, 0
+`define TEST_CASE \
+    vl   = 'd8; \
+    vtype = vtype_t'{vsew   : EW32, \
+    vlmul  : LMUL_1, default: 'b0}; \
+    stim_array[0] = stimulus'{                                             \
+      insn       : 32'h5e00b157,                                           \
+      insn_id    : 'd0,                                                    \
+      vec_context: vec_context_t'{vl   : 17, vtype : vtype, vstart: 'd0} \
+    };                                                                     \
+    stim_array[1] = stimulus'{                                             \
+      insn: 32'h0200e127,                                                  \
+      insn_id: 'd1,                                                        \
+      vec_context: vec_context_t'{vl   : 19, vtype : vtype, vstart: 'd1} \
     };
 
 `endif

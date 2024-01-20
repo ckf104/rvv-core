@@ -287,7 +287,9 @@ module valu_wrapper
     .op_i     (issuing_req.vop),
     .result_o (alu_result)
   );
-  mask_generator_v1 mask_generator (
+  mask_generator_v1 #(
+    .MaskWidth(VRFWordWidthB)
+  ) mask_generator (
     .first_req_i (is_first_issue_q),
     .last_req_i  (issuing_done),
     .skip_first_i(issuing_req.skip_first_cnt),

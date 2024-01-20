@@ -211,7 +211,7 @@ module verilator_test_top
     // Output store operands
     .store_op_valid_o    (store_op_valid),
     .store_op_o          (store_op),
-    .store_op_gnt_i      (store_op_gnt),
+    .store_op_ready_i    (store_op_gnt),
     // Load input operands
     .load_op_valid_i     (load_op_valid),
     .load_op_ready_o     (load_op_ready),

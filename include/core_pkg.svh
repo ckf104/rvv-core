@@ -166,6 +166,7 @@ package core_pkg;
 
   typedef struct packed {
     vop_e          vop;
+    // For store instruction, `vew_vd` is element width of store operand
     rvv_pkg::vew_e vew_vd;
     vlen_t         vl;
     vlen_t         vstart;

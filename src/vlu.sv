@@ -31,23 +31,28 @@ module vlu
   output logic                   insn_use_vd_o,
   output vreg_t                  insn_vd_o
 );
+  logic acc_new_req;
+  assign acc_new_req = vfu_req_ready_o && vfu_req_valid_i && target_vfu_i == VLU;
+
   // Temporary variables
   vlen_t vstartB, vlB;
   acc_cnt_t cut_vstart, cut_vl, acc_cnt;
   word_cnt_t word_cnt;
   logic round;
-  logic [LogNrLane-1:0] start_op_cnt;
+  logic [GetWidth(NrLane)-1:0] start_op_cnt;
   bytes_cnt_t skip_first, skip_last;
 
   always_comb begin : compute_initial_parameter
-    vstartB      = vfu_req_i.vstart << vfu_req_i.vew_vd;
-    vlB          = vfu_req_i.vl << vfu_req_i.vew_vd;
+    vstartB    = vfu_req_i.vstart << vfu_req_i.vew_vd;
+    vlB        = vfu_req_i.vl << vfu_req_i.vew_vd;
 
-    skip_first   = vstartB[$clog2(VRFWordWidthB)-1:0];
-    skip_last    = ~vlB[$clog2(VRFWordWidthB)-1:0] + 1;
-    start_op_cnt = vstartB[ByteBlockWidth-1:$clog2(VRFWordWidthB)];
+    skip_first = vstartB[$clog2(VRFWordWidthB)-1:0];
+    skip_last  = ~vlB[$clog2(VRFWordWidthB)-1:0] + 1;
 
-    word_cnt     = vlB[$bits(vlen_t)-1:$clog2(VRFWordWidthB)] - vstartB[$bits(vlen_t)-1:$clog2(VRFWordWidthB)];
+    if (NrLane == 1) start_op_cnt = 1'b0;
+    else start_op_cnt = vstartB[ByteBlockWidth-1:$clog2(VRFWordWidthB)];
+
+    word_cnt = vlB[$bits(vlen_t)-1:$clog2(VRFWordWidthB)] - vstartB[$bits(vlen_t)-1:$clog2(VRFWordWidthB)];
     if (vlB[$clog2(VRFWordWidthB)-1:0] != 'b0) word_cnt += 1;
 
     cut_vstart = vstartB[$bits(vlen_t)-1:ByteBlockWidth];
@@ -86,7 +91,7 @@ module vlu
         op_cnt_d    = 'b0;
       end
     end
-    if (vfu_req_valid_i && vfu_req_ready_o) op_cnt_d = start_op_cnt;
+    if (acc_new_req) op_cnt_d = start_op_cnt;
   end : sel_comb
 
   word_cnt_t load_op_cnt_d, load_op_cnt_q;
@@ -96,14 +101,14 @@ module vlu
   always_comb begin : first_load_op
     first_load_op_d = first_load_op_q;
     if (load_op_valid_i && load_op_ready_o) first_load_op_d = 1'b0;
-    if (vfu_req_valid_i && vfu_req_ready_o) first_load_op_d = 1'b1;
+    if (acc_new_req) first_load_op_d = 1'b1;
   end
 
   always_comb begin : counter
     load_op_cnt_d = load_op_cnt_q;
 
     if (load_op_valid_i && load_op_ready_o) load_op_cnt_d = load_op_cnt_q - 1;
-    if (vfu_req_valid_i && vfu_req_ready_o) load_op_cnt_d = word_cnt;
+    if (acc_new_req) load_op_cnt_d = word_cnt;
   end
 
   vrf_data_t [NrLane-1:0] load_op_d, load_op_q, shuffled_load_op;
@@ -192,7 +197,7 @@ module vlu
 
   always_comb begin : compute_addr
     load_op_addr_d = load_op_addr_q;
-    if (vfu_req_valid_i && vfu_req_ready_o) load_op_addr_d = GetVRFAddr(vfu_req_i.vd) + cut_vstart;
+    if (acc_new_req) load_op_addr_d = GetVRFAddr(vfu_req_i.vd) + cut_vstart;
     else if (pop) load_op_addr_d = load_op_addr_q + 1;
   end : compute_addr
 
@@ -261,9 +266,6 @@ module vlu
     op_cnt_q        <= op_cnt_d;
     load_op_addr_q  <= load_op_addr_d;
     load_op_cnt_q   <= load_op_cnt_d;
-  end
-
-  always_ff @(posedge clk_i) begin
   end
 
 endmodule : vlu

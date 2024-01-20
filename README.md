@@ -1,7 +1,7 @@
 ## Function
 
 * 支持若干 ALU 指令，并且 ALU 支持非对齐的 vl, vstart
-* 支持 VLE, VSE 指令，并且支持 vl 不为整倍数的情况，但要求 scalar cpu 将 vl 补到整倍数（即 scalar cpu 需要发送或接收整倍数的 operand）。不支持 vstart
+* 支持 VLE, VSE 指令，支持非对齐的 vl，vstart。对于非对齐的 vl, vstart，要求 scalar cpu 发送时对齐 VRFWordWidth（目前 VRFWordWidth == 64，例如 vstart = 6, EW = 32 时，scalar cpu 对齐到 vstart = 4 时发送，第一个 word 的前 32bits 会被 rvvcore 丢弃）
 * 目前的冒险处理非常简单：当遭遇 WAR, RAW, WAW 时暂停发射
 
 ## TODO List
@@ -10,8 +10,10 @@
 * vlu, vsu 支持 vstart
 * 支持 mask, EW1
 * 支持 widening, narrowing 指令
-* 确定 load / store 接口，是否需要 scalar cpu 发送或接收 operand 时补齐 vl。
+* 目前的 load/store 接口是否友好？当地址未对齐时是否造成一些问题（例如 vstart = 1, EW = 32, 目前的接口要求强制对齐到 vstart == 0, 如果 vstart == 1 时地址才 8Bytes 对齐，这会导致每次访问的对齐降级为 4Bytes）
 * Use x to replace default zero
+* 将需要 reset 和不需要 reset 的寄存器的 always_ff 区分开
+* Support NrLane=1: 主要是有些地方应该使用 GetWidth(NrLane) 的，误用了 LogNrLane，以及有些信号如果 NrLane=1 时就宽度为 0 了
 * chaining support
 * 增加标量寄存器的传输接口（在 rvv1.0 中，只有 vsetvl，vlse, vsse 三种指令会用到两个标量寄存器，但在目前的设计考虑中这三种指令都应该在 scalar cpu 中完成），并实现相应的传输指令。
 * 处理 flush_i 信号
@@ -66,6 +68,11 @@
 
 * In addition, except for mask load instructions, any element in the tail of a mask result can also be written with the value the mask-producing operation would have calculated with vl=VLMAX. Furthermore, for mask-logical instructions and vmsbf.m, vmsif.m, vmsof.m mask-manipulation instructions, any element in the tail of the result can be written with the value the mask-producing operation would have calculated with vl=VLEN, SEW=8, and LMUL=8 (i.e., all bits of the mask register can be overwritten). **TODO: 这段话对实现 mask 有哪些影响？**
 
+* 资源使用影响：
+  * mem_shuffler_v0: lane2 lut 165, lane 4 lut 381
+  * mem_shuffler_v1: lane2 lut 135, lane 4 lut 315
+  * mem_shuffler_v2: **TODO** (reuse logic if smaller bandwidth is acceptable)
+
 ## Ideas
 
 * 使用 micro op 来简化设计？
@@ -89,7 +96,7 @@
 
     因此目前认为 EW1 不会影响 mask 指令的实现
 
-* 尽可能地让各个 lane 同步可以简化设计，目前的想法是：将 vstart 和 vl 与 lane 的数目对齐，然后利用 mask 将多余的计算舍弃掉。
+* 尽可能地让各个 lane 同步可以简化设计，目前的想法是：将 vstart 和 vl 与 lane 的数目对齐，然后利用 mask 将多余的计算舍弃掉（是否简化了呢？如果允许各个 lane 的工作量不一致，在 valu wrapper 中计算 skipped bytes 时是否会相对容易一些？）。
 * 实现一些 log helper
 
 ## Non-speculative branch

@@ -29,7 +29,7 @@ module rvv_core
   // Output store operands
   output logic                store_op_valid_o,
   output vrf_data_t           store_op_o,
-  input  logic                store_op_gnt_i,
+  input  logic                store_op_ready_i,
   // Input load values
   input  logic                load_op_valid_i,
   input  vrf_data_t           load_op_i,
@@ -171,7 +171,7 @@ module rvv_core
     .store_op_ready_o(store_op_ready),
     .store_op_i      (store_op),
     // Output store operands
-    .store_op_gnt_i  (store_op_gnt_i),
+    .store_op_ready_i(store_op_ready_i),
     .store_op_valid_o(store_op_valid_o),
     .store_op_o      (store_op_o),
     // Interface with committer

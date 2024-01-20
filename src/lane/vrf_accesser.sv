@@ -287,7 +287,7 @@ module vrf_accesser
   bank_addr_t [NrOpQueue-1:0] vrf_req_addr_q;
   insn_id_t   [NrOpQueue-1:0] vrf_req_id_q;
   always_ff @(posedge clk_i) begin
-    vrf_req_addr_q <= vrf_req_addr;
+    vrf_req_addr_q <= vrf_req_addr[NrOpQueue-1:0];
     for (int unsigned op_type = 0; op_type < NrOpQueue; ++op_type) begin
       if (req_ready_o && op_queue_req[op_type]) begin
         vrf_req_id_q[op_type] <= op_req_i.insn_id;
@@ -296,18 +296,18 @@ module vrf_accesser
   end
 
   always_ff @(posedge clk_i) begin
-    for (int i = VALU; i < NrWriteBackVFU; i = i + 1) begin
+    for (int unsigned i = VALU; i < NrWriteBackVFU; i = i + 1) begin
       automatic vfu_e q = vfu_e'(i);
       if (vfu_result_gnt_o[i]) begin
         $display("[%0d][Lane%0d][VRFWrite] %s: addr:%0x, data:%x, mask:%b, id:%0x", $time, LaneId, q.name(),
                  vfu_result_addr_i[i], vfu_result_wdata_i[i], vfu_result_wstrb_i[i], vfu_result_id_i[i]);
       end
     end
-    for (int i = ALUA; i < NrOpQueue; i = i + 1) begin
+    for (int unsigned i = ALUA; i < NrOpQueue; i = i + 1) begin
       automatic op_queue_e q = op_queue_e'(i);
       if (rdata_valid_q[i]) begin
-        $display("[%0d][Lane%0d][VRFRead] %s: addr:%0x, data:%x, id:%0x", $time, LaneId, q.name(), (vrf_req_addr_q[i] << $clog2
-                 (NrBank)) + bank_sel_q[i], rdata[bank_sel_q[i]], vrf_req_id_q[i]);
+        $display("[%0d][Lane%0d][VRFRead] %s: addr:%0x, data:%x, id:%0x", $time, LaneId, q.name(),
+                 (vrf_req_addr_q[i] << $clog2(NrBank)) + bank_sel_q[i], rdata[bank_sel_q[i]], vrf_req_id_q[i]);
       end
     end
   end
