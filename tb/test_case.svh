@@ -155,6 +155,33 @@ localparam int unsigned NumStimulus = 4;
       vec_context: vec_context_t'{vl   : 20, vtype : vtype, vstart: 'd0} \
     };
 
+`elsif GENERATE_CASE6
+
+localparam int unsigned NumStimulus = 3;
+
+// vmv.v.i v2, 1 (vl = 20, vstart = 0)
+// vle32.v v2, (ra)  (vl = 18, vstart = 1)
+// vse32.v v2, (ra) (vl = 20, vstart = 0)
+`define TEST_CASE \
+    vl   = 'd8; \
+    vtype = vtype_t'{vsew   : EW32, \
+    vlmul  : LMUL_1, default: 'b0}; \
+    stim_array[0] = stimulus'{                                             \
+      insn       : 32'h5e00b157,                                           \
+      insn_id    : 'd0,                                                    \
+      vec_context: vec_context_t'{vl   : 20, vtype : vtype, vstart: 'd0} \
+    };                                                                     \
+    stim_array[1] = stimulus'{                                             \
+      insn       : 32'h0200e107,                                           \
+      insn_id    : 'd1,                                                    \
+      vec_context: vec_context_t'{vl   : 18, vtype : vtype, vstart: 'd1} \
+    };                                                                     \
+    stim_array[2] = stimulus'{                                             \
+      insn: 32'h0200e127,                                                  \
+      insn_id: 'd2,                                                        \
+      vec_context: vec_context_t'{vl   : 20, vtype : vtype, vstart: 'd0} \
+    };
+
 `endif
 
 `endif  // _TEST_CASE_SVH

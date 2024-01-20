@@ -45,6 +45,7 @@ package core_pkg;
   localparam int unsigned ByteBlock = VRFWordWidthB * NrLane;
   localparam int unsigned ByteBlockWidth = $clog2(ByteBlock);
   localparam int unsigned AccessCntWidth = VLWidth - ByteBlockWidth;
+  localparam int unsigned WordAccCntWidth = VLWidth - $clog2(VRFWordWidthB);
 
   localparam int unsigned InsnIDWidth  /*verilator public*/ = 3;
   localparam int unsigned InsnIDNum = 1 << InsnIDWidth;
@@ -62,7 +63,14 @@ package core_pkg;
   // and trailing bytes caused by non-aligned vstart or vl. It's possible the whole
   // vrf word is skipped. Therefore the width of `ele_cnt_t` is `clog2(VRFWordWidthB) + 1`.
   typedef logic [$clog2(VRFWordWidthB):0] ele_cnt_t;
+  // For the same purpose as introducing `ele_cnt_t`, we typedef `bytes_cnt_t` for
+  // non-aligned vstart or vl in memory instruction, except that it's impossible to skip
+  // the whole vrf word. So we can save one bit.
+  typedef logic [$clog2(VRFWordWidthB)-1:0] bytes_cnt_t;
+  // Counter type of access into each lane
   typedef logic [AccessCntWidth-1:0] acc_cnt_t;
+  // Counter type of accessing by VRFWord
+  typedef logic [WordAccCntWidth-1:0] word_cnt_t;
 
   // Element width for vrf storage
   typedef enum logic [2:0] {

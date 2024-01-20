@@ -1,5 +1,6 @@
 `include "core_pkg.svh"
 
+// TODO: refactor into issuer-worker model
 module vlu
   import core_pkg::*;
 #(
@@ -30,79 +31,113 @@ module vlu
   output logic                   insn_use_vd_o,
   output vreg_t                  insn_vd_o
 );
-  // TODO: refactor this to support vstart
+  // Temporary variables
+  vlen_t vstartB, vlB;
+  acc_cnt_t cut_vstart, cut_vl, acc_cnt;
+  word_cnt_t word_cnt;
+  logic round;
+  logic [LogNrLane-1:0] start_op_cnt;
+  bytes_cnt_t skip_first, skip_last;
+
+  always_comb begin : compute_initial_parameter
+    vstartB      = vfu_req_i.vstart << vfu_req_i.vew_vd;
+    vlB          = vfu_req_i.vl << vfu_req_i.vew_vd;
+
+    skip_first   = vstartB[$clog2(VRFWordWidthB)-1:0];
+    skip_last    = ~vlB[$clog2(VRFWordWidthB)-1:0] + 1;
+    start_op_cnt = vstartB[ByteBlockWidth-1:$clog2(VRFWordWidthB)];
+
+    word_cnt     = vlB[$bits(vlen_t)-1:$clog2(VRFWordWidthB)] - vstartB[$bits(vlen_t)-1:$clog2(VRFWordWidthB)];
+    if (vlB[$clog2(VRFWordWidthB)-1:0] != 'b0) word_cnt += 1;
+
+    cut_vstart = vstartB[$bits(vlen_t)-1:ByteBlockWidth];
+    cut_vl     = vlB[$bits(vlen_t)-1:ByteBlockWidth];
+    round      = vlB[ByteBlockWidth-1:0] != 'b0;
+    acc_cnt    = cut_vl + round - cut_vstart;
+  end : compute_initial_parameter
+
   typedef struct packed {
     rvv_pkg::vew_e vew_vd;
-    vlen_t         vlB;
+    acc_cnt_t      acc_cnt;
     // vlen_t         vstart;
     // logic [2:0]    use_vs;
     // vrf_data_t     scalar_op;
+    bytes_cnt_t    skip_first;
+    bytes_cnt_t    skip_last;
     insn_id_t      insn_id;
     vreg_t         vd;
   } vlu_cmd_t;
-
-  // logic [NrLane-1:0] op_in_buf_empty, op_in_buf_full;
-  logic [NrLane-1:0] load_op_valid, load_op_gnt;
-  vrf_data_t [NrLane-1:0] load_op, shuffled_load_op;
-  vrf_addr_t load_op_addr_d, load_op_addr_q;
-  vrf_strb_t [NrLane-1:0] mask;
+  typedef enum logic [1:0] {
+    IDLE,
+    LOAD
+  } state_e;
+  state_e state_q, state_d;
 
   logic [GetWidth(NrLane)-1:0] op_cnt_q, op_cnt_d;
-  logic [NrLane-1:0] load_op_valid_demlx, load_op_ready_demlx;
-  vlu_cmd_t cmd_q, cmd_d;
-
-  stream_demux #(
-    .N_OUP(NrLane)
-  ) stream_demux (
-    .inp_valid_i(load_op_valid_i),
-    .inp_ready_o(load_op_ready_o),
-    .oup_sel_i  (op_cnt_q),
-    .oup_valid_o(load_op_valid_demlx),
-    .oup_ready_i(load_op_ready_demlx)
-  );
+  logic op_cnt_wrap;
 
   always_comb begin : sel_comb
-    op_cnt_d = op_cnt_q;
+    op_cnt_wrap = 1'b0;
+    op_cnt_d    = op_cnt_q;
     if (load_op_valid_i && load_op_ready_o) begin
       op_cnt_d = op_cnt_q + 1;
-      if (op_cnt_q == NrLaneMinusOne[GetWidth(NrLane)-1:0]) op_cnt_d = 'b0;
+      if (op_cnt_q == NrLaneMinusOne[GetWidth(NrLane)-1:0]) begin
+        op_cnt_wrap = 1'b1;
+        op_cnt_d    = 'b0;
+      end
     end
-    // TODO: we can't reset op_cnt_q when new vfu_req is accepted,
-    // because operand may be sent before that.
-    // if (vfu_req_valid_i && vfu_req_ready_o) op_cnt_d = 'b0;
+    if (vfu_req_valid_i && vfu_req_ready_o) op_cnt_d = start_op_cnt;
   end : sel_comb
 
-  // We can't assume all store operands will arrive in vsu at the same time,
-  // hence four fifo have been generated.
-  // Note: vrf_accesser don't launch an access until load_op_ready_o is asserted.
-  for (genvar i = 0; i < NrLane; ++i) begin : gen_op_in_buf
-    fall_through_register #(
-      .T(vrf_data_t)
-    ) alu_op_buffer (
-      .clk_i     (clk_i),
-      .rst_ni    (rst_ni),
-      // TODO: unlike `vsu`, fifo in `vlu` should not be flushed?
-      .clr_i     (1'b0),
-      .testmode_i(1'b0),
-      .data_i    (load_op_i),
-      .valid_i   (load_op_valid_demlx[i]),
-      .ready_o   (load_op_ready_demlx[i]),
-      .data_o    (load_op[i]),
-      .valid_o   (load_op_valid[i]),
-      .ready_i   (load_op_gnt[i])
-    );
+  word_cnt_t load_op_cnt_d, load_op_cnt_q;
+  logic last_load_op, first_load_op_d, first_load_op_q;
+  assign last_load_op = load_op_valid_i && load_op_ready_o && load_op_cnt_q == 'b1;
+
+  always_comb begin : first_load_op
+    first_load_op_d = first_load_op_q;
+    if (load_op_valid_i && load_op_ready_o) first_load_op_d = 1'b0;
+    if (vfu_req_valid_i && vfu_req_ready_o) first_load_op_d = 1'b1;
   end
 
-  mem_shuffler_v1 mem_shuffler (
+  always_comb begin : counter
+    load_op_cnt_d = load_op_cnt_q;
+
+    if (load_op_valid_i && load_op_ready_o) load_op_cnt_d = load_op_cnt_q - 1;
+    if (vfu_req_valid_i && vfu_req_ready_o) load_op_cnt_d = word_cnt;
+  end
+
+  vrf_data_t [NrLane-1:0] load_op_d, load_op_q, shuffled_load_op;
+  vrf_strb_t [NrLane-1:0] load_mask_d, load_mask_q, shuffled_mask;
+
+  // TODO: multipush_fifo to remove `load_op_q`, `load_mask_q`
+  always_comb begin
+    load_op_d   = load_op_q;
+    load_mask_d = load_mask_q;
+    if (load_op_valid_i && load_op_ready_o) begin
+      if (first_load_op_q || op_cnt_q == 'b0) begin
+        load_op_d   = shuffled_load_op;
+        load_mask_d = shuffled_mask;
+      end else begin
+        load_op_d   = load_op_q | shuffled_load_op;
+        load_mask_d = load_mask_q | shuffled_mask;
+      end
+    end
+  end
+
+  mem_shuffler_v0 mem_shuffler (
     // Input data
-    .data_i   (load_op),
-    .bytes_cnt(cmd_q.vlB),
+    .data_i    (load_op_i),
+    .sel       (op_cnt_q),
+    .is_first  (first_load_op_q),
+    .skip_first(cmd_q.skip_first),
+    .is_last   (last_load_op),
+    .skip_last (cmd_q.skip_last),
     // Select one vrf word
 
     .sew   (cmd_q.vew_vd),
     // Output data
     .data_o(shuffled_load_op),
-    .mask_o(mask)
+    .mask_o(shuffled_mask)
   );
 
   typedef struct packed {
@@ -112,8 +147,8 @@ module vlu
 
   payload_t [NrLane-1:0] payload_in, payload_out;
   for (genvar i = 0; i < NrLane; ++i) begin : gen_payload
-    assign payload_in[i].data = shuffled_load_op[i];
-    assign payload_in[i].mask = mask[i];
+    assign payload_in[i].data = load_op_d[i];
+    assign payload_in[i].mask = load_mask_d[i];
     assign load_op_o[i]       = payload_out[i].data;
     assign load_op_strb_o[i]  = payload_out[i].mask;
 
@@ -122,16 +157,10 @@ module vlu
   end
 
   logic outbuf_full, push, pop;
-
-  always_comb begin : push_comb
-    load_op_gnt = 'b0;
-    push        = 1'b0;
-    if (state_q == LOAD && !outbuf_full) begin
-      // TODO: here we assumed that scalar cpu will round vl up to ByteBlock
-      push        = &load_op_valid;
-      load_op_gnt = {NrLane{push}};
-    end
-  end : push_comb
+  // We may have received all of load operands even though we are in LOAD state.
+  // Therefore `load_op_cnt_q != 0` is a necessary condition to assert `load_op_ready_o`.
+  assign load_op_ready_o = state_q == LOAD && load_op_cnt_q != 'b0 && !outbuf_full;
+  assign push            = last_load_op || op_cnt_wrap;
 
   multi_sync_fifo #(
     .NumFifo(NrLane),
@@ -159,30 +188,15 @@ module vlu
     .pop_o       (pop)
   );
 
-  typedef enum logic [1:0] {
-    IDLE,
-    LOAD
-  } state_e;
-  state_e state_q, state_d;
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni) begin
-      // Don't need to reset `cmd_q`, `load_op_addr_q`
-      op_cnt_q <= 'b0;
-      state_q  <= IDLE;
-    end else begin
-      cmd_q          <= cmd_d;
-      op_cnt_q       <= op_cnt_d;
-      state_q        <= state_d;
-      load_op_addr_q <= load_op_addr_d;
-    end
-  end
+  vrf_addr_t load_op_addr_d, load_op_addr_q;
 
   always_comb begin : compute_addr
     load_op_addr_d = load_op_addr_q;
-    if (vfu_req_valid_i && vfu_req_ready_o) load_op_addr_d = GetVRFAddr(vfu_req_i.vd);
+    if (vfu_req_valid_i && vfu_req_ready_o) load_op_addr_d = GetVRFAddr(vfu_req_i.vd) + cut_vstart;
     else if (pop) load_op_addr_d = load_op_addr_q + 1;
   end : compute_addr
+
+  vlu_cmd_t cmd_q, cmd_d;
 
   always_comb begin : main_comb
     state_d         = state_q;
@@ -198,17 +212,19 @@ module vlu
       IDLE: begin
         vfu_req_ready_o = 1'b1;
         if (vfu_req_valid_i && target_vfu_i == VLU) begin
-          cmd_d.vew_vd  = vfu_req_i.vew_vd;
-          cmd_d.vlB     = vfu_req_i.vl << vfu_req_i.vew_vd;
-          cmd_d.insn_id = vfu_req_i.insn_id;
-          cmd_d.vd      = vfu_req_i.vd;
-          state_d       = LOAD;
+          cmd_d.vew_vd     = vfu_req_i.vew_vd;
+          cmd_d.acc_cnt    = acc_cnt;
+          cmd_d.insn_id    = vfu_req_i.insn_id;
+          cmd_d.vd         = vfu_req_i.vd;
+          cmd_d.skip_first = skip_first;
+          cmd_d.skip_last  = skip_last;
+          state_d          = LOAD;
         end
       end
       LOAD: begin
         if (pop) begin
-          cmd_d.vlB = cmd_q.vlB - ByteBlock[$bits(vlen_t)-1:0];
-          if (cmd_q.vlB <= ByteBlock[$bits(vlen_t)-1:0]) begin
+          cmd_d.acc_cnt = cmd_q.acc_cnt - 1;
+          if (cmd_q.acc_cnt == 'b1) begin
             // cmd_d.vlB = 'b0;
             done_o          = 1'b1;
 
@@ -216,15 +232,38 @@ module vlu
             // can't set `vfu_req_ready_o` according to `vfu_req_valid_i`.
             vfu_req_ready_o = 1'b1;
             if (vfu_req_valid_i && target_vfu_i == VLU) begin
-              cmd_d.vew_vd  = vfu_req_i.vew_vd;
-              cmd_d.vlB     = vfu_req_i.vl << vfu_req_i.vew_vd;
-              cmd_d.insn_id = vfu_req_i.insn_id;
-              cmd_d.vd      = vfu_req_i.vd;
+              cmd_d.vew_vd     = vfu_req_i.vew_vd;
+              cmd_d.acc_cnt    = acc_cnt;
+              cmd_d.insn_id    = vfu_req_i.insn_id;
+              cmd_d.vd         = vfu_req_i.vd;
+              cmd_d.skip_first = skip_first;
+              cmd_d.skip_last  = skip_last;
             end else state_d = IDLE;
           end
         end
       end
     endcase
   end : main_comb
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin
+    if (!rst_ni) begin
+      state_q <= IDLE;
+    end else begin
+      state_q <= state_d;
+    end
+  end
+
+  always_ff @(posedge clk_i) begin
+    load_op_q       <= load_op_d;
+    load_mask_q     <= load_mask_d;
+    first_load_op_q <= first_load_op_d;
+    cmd_q           <= cmd_d;
+    op_cnt_q        <= op_cnt_d;
+    load_op_addr_q  <= load_op_addr_d;
+    load_op_cnt_q   <= load_op_cnt_d;
+  end
+
+  always_ff @(posedge clk_i) begin
+  end
 
 endmodule : vlu
